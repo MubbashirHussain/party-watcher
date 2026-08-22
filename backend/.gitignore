@@ -4,4 +4,4 @@ coverage/
 .env
 *.log
 .DS_Store
-uploads/test-movie.mp4
+./uploads/*
