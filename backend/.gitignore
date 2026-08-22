@@ -6,4 +6,4 @@ coverage/
 .DS_Store
 uploads/
 !uploads/interstellar.jpg
-./temp.prompt.md
+temp.prompt.md
