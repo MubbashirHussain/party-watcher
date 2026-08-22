@@ -1,0 +1,14 @@
+---
+description: Testing rules for Party Watch
+globs: ["**/*.test.ts"]
+---
+
+# Testing
+
+- Use Vitest.
+- Tests should focus on observable behavior.
+- Test the movie streaming endpoint.
+- Test missing movies.
+- Test invalid movie IDs.
+- Test HTTP Range requests.
+- Do not over-test implementation details.

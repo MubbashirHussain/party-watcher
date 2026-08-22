@@ -1,0 +1,16 @@
+---
+description: TypeScript rules for Party Watch
+globs: ["**/*.ts"]
+---
+
+# TypeScript
+
+- Use strict TypeScript.
+- Avoid `any`.
+- Prefer explicit types for public functions.
+- Use `unknown` where appropriate instead of `any`.
+- Keep functions small.
+- Use async/await where appropriate.
+- Handle errors explicitly.
+- Do not suppress TypeScript errors with `@ts-ignore` or `@ts-expect-error`
+  unless there is a documented reason.

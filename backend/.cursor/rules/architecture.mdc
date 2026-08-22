@@ -1,0 +1,47 @@
+---
+description: Architecture rules for Party Watch
+globs: ["**/*"]
+---
+
+# Architecture
+
+```
+Route
+  ↓
+Service
+  ↓
+Filesystem
+```
+
+## Responsibilities
+
+### Routes
+
+Responsible for:
+
+- HTTP request handling
+- Parameter validation
+- HTTP response handling
+- Calling services
+
+Routes must NOT contain complicated filesystem logic.
+
+### Services
+
+Responsible for:
+
+- Finding the requested movie
+- Validating movie existence
+- Obtaining file metadata
+- Creating the appropriate stream
+
+### Utils
+
+Responsible only for reusable low-level filesystem/path helpers.
+
+### Types
+
+Contain shared TypeScript types.
+
+Do not create repositories, controllers, factories, dependency injection
+containers, or other abstractions unless explicitly required later.

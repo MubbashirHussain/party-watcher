@@ -1,0 +1,19 @@
+---
+description: General project rules for Party Watch
+globs: ["**/*"]
+---
+
+# Project Rules
+
+- This is a small private watch-party application.
+- Prefer simple solutions.
+- Do not introduce abstractions without a concrete need.
+- Do not implement future features unless explicitly requested.
+- Keep dependencies minimal.
+- Keep modules focused.
+- Avoid unnecessary design patterns.
+- Do not duplicate business logic.
+- Prefer readable code over clever code.
+
+Future architecture must not influence current implementation unnecessarily.
+Implement only the current milestone.
