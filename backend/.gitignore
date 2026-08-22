@@ -4,5 +4,6 @@ coverage/
 .env
 *.log
 .DS_Store
-./uploads/**
+uploads/
+!uploads/interstellar.jpg
 ./temp.prompt.md
