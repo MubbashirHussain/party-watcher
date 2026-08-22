@@ -1,0 +1,22 @@
+{
+  "4c046f8f-cc44-4cbc-853d-9f9d3dc94275": {
+    "id": "4c046f8f-cc44-4cbc-853d-9f9d3dc94275",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      },
+      {
+        "id": "2a5f8fcc-3179-48e7-ab67-d1fa2526af82",
+        "name": "it's me"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  }
+}

@@ -98,8 +98,9 @@ vanilla JavaScript for the copy-link button.
 
 ## Current Implementation — Step 3
 
-Step 3 adds a movie metadata catalog and a modern dark UI. Room mechanics,
-the in-memory room store, and the anonymous session system are unchanged.
+Step 3 adds a movie metadata catalog, a modern dark UI, and a file-backed
+room store with named users. Room mechanics build on the anonymous session
+system; there is no database, WebSocket, or authentication yet.
 
 ### Movie catalog (`data/movies.json`)
 
@@ -144,6 +145,55 @@ year · duration, "Create Room →"). A client-side search box filters cards
 without a round-trip. No UUIDs are displayed; everything comes from catalog
 metadata.
 
+### Room state (`data/current.json`)
+
+Active rooms are persisted to `data/current.json` as a map of room ID →
+room. `RoomService` (`src/services/room.service.ts`) provides safe helpers to
+create a room, find a room, add/rename a user, and read/write the file.
+Writes are chained on a single promise so concurrent requests cannot
+interleave file writes, and the file is written atomically via a temp file +
+rename. A missing file starts the store empty; the `data/` directory is
+created automatically.
+
+```json
+{
+  "18393267846823789": {
+    "movieId": "interstellar",
+    "adminId": "user-uuid",
+    "users": [{ "id": "user-uuid", "name": "Alex" }],
+    "playback": { "paused": false, "timeline": 0, "quality": "720p" }
+  }
+}
+```
+
+`playback` values are stored state only — synchronization is deliberately not
+implemented yet and will use this shape in a later step.
+
+### Room creation
+
+`POST /rooms` validates the movie against the catalog, then:
+
+1. Generates a unique room ID (`crypto.randomUUID()`).
+2. Generates a unique anonymous `userId` and persists it in the `pw_session`
+   cookie.
+3. Creates the room in `data/current.json` with the creator as `adminId`
+   (also listed in `users` as "Host").
+4. Redirects (302) to `/room/:roomId`.
+
+The room URL contains only the room ID — never the user ID or admin info.
+
+### Joining a room
+
+`GET /room/:roomId` reads the visitor's `userId` cookie. If the user is
+already in the room, the room renders directly. If they are new, the page
+shows a name modal ("What's your name?"). Submitting it `POST`s to
+`/room/:roomId/join`, which saves the name against the `userId`, adds the
+user to the room's `users` list, and redirects back to the room.
+
+Every visitor has a unique anonymous `userId` persisted in the `pw_session`
+cookie. Users are never identified by IP address. No authentication is
+required.
+
 ### Room page
 
 `GET /room/:roomId` is video-first. The movie streams through the existing
@@ -157,7 +207,8 @@ overlay by default:
 
 The shareable URL remains `/room/:roomId` with no admin secret; the anonymous
 `pw_session` cookie continues to determine whether the visitor is the host
-(room creator) or a viewer.
+(room creator) or a viewer. The overlay also shows the current user's name,
+other users in the room, and the room ID.
 
 ### Static assets
 
@@ -167,7 +218,7 @@ served by Fastify under `/static/`. The build step copies `views/` and
 
 ## Planned Conceptual Direction
 
-These are future directions only. Nothing beyond Step 2 is implemented.
+These are future directions only. Nothing beyond Step 3 is implemented.
 
 ```
 Step 1
@@ -177,7 +228,7 @@ Step 2
 Watch room → server-rendered UI → in-memory room state
 
 Step 3
-Movie catalog → modern dark UI → thumbnail route
+Movie catalog → dark UI → file-backed rooms with named users
 
 Step 4
 WebSocket → synchronized playback

@@ -1,16 +1,86 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Not Found · Party Watch</title>
-  <link rel="stylesheet" href="/static/css/app.css" />
-</head>
-<body>
-  <div class="simple-page">
-    <h1>404</h1>
-    <p><%= message %></p>
-    <a class="back-link" href="/">← Back to movies</a>
-  </div>
-</body>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>404 — Room Not Found · Party Watch</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: { sans: ["Inter", "sans-serif"] },
+            colors: {
+              darkBg: "#09090b",
+              cardBg: "#121217",
+              accent: "#e50914",
+              accentHover: "#f40612",
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body
+    class="bg-darkBg text-zinc-100 font-sans antialiased min-h-screen flex flex-col items-center justify-center p-6 selection:bg-accent selection:text-white"
+  >
+    <div
+      class="max-w-md w-full bg-cardBg border border-zinc-800/80 rounded-3xl p-8 sm:p-10 shadow-2xl shadow-black text-center relative overflow-hidden"
+    >
+      <div
+        class="absolute -top-24 -right-24 w-48 h-48 bg-accent/10 rounded-full blur-3xl pointer-events-none"
+      ></div>
+
+      <div
+        class="w-14 h-14 rounded-2xl bg-accent/20 border border-accent/30 text-accent flex items-center justify-center mx-auto mb-6 shadow-lg shadow-accent/20"
+      >
+        <svg
+          class="w-7 h-7"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3"
+          />
+        </svg>
+      </div>
+
+      <div
+        class="text-5xl sm:text-6xl font-black text-white tracking-tight mb-2 font-mono"
+      >
+        404
+      </div>
+
+      <h1 class="text-xl font-bold text-white mb-2 tracking-tight">
+        Room doesn't exist
+      </h1>
+
+      <p class="text-sm text-zinc-400 mb-8 leading-relaxed">
+        <%= typeof message !== 'undefined' ? message : "This screening room
+        doesn't exist or may have expired." %>
+      </p>
+
+      <a
+        href="/"
+        class="w-full inline-flex items-center justify-center px-6 py-3.5 bg-accent hover:bg-accentHover text-white text-sm font-semibold rounded-xl shadow-lg shadow-accent/25 transition-all"
+      >
+        ← Back Home
+      </a>
+    </div>
+
+    <footer class="mt-8 text-xs text-zinc-600 font-medium">
+      &copy; 2026 Party Watch. All rights reserved.
+    </footer>
+  </body>
 </html>

@@ -1,76 +1,426 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title><%= movieTitle %> · Party Watch</title>
-  <link rel="stylesheet" href="/static/css/app.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= movieTitle %> · Party Watch</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        darkBg: '#09090b',
+                        cardBg: '#121217',
+                        accent: '#e50914',
+                        accentHover: '#f40612',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar and hide default video controls styling */
+        video::-webkit-media-controls { display: none !important; }
+        video::-webkit-media-controls-enclosure { display: none !important; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
 </head>
-<body>
-  <div class="room-page">
-    <div class="room-stage" id="roomStage">
-      <video id="player" controls autoplay src="/movie/<%= movieId %>"></video>
+<body class="bg-darkBg text-zinc-100 font-sans antialiased h-screen overflow-hidden flex flex-col selection:bg-accent selection:text-white">
 
-      <div class="room-overlay" id="roomOverlay">
-        <div class="overlay-top">
-          <span class="movie-title"><%= movieTitle %></span>
-          <% if (isAdmin) { %>
-            <span class="badge">Host</span>
-          <% } else { %>
-            <span class="badge">Viewer</span>
-          <% } %>
-        </div>
-        <div class="overlay-meta"><%= movieYear %> · <%= movieDuration %></div>
-        <div class="room-info">Room: <code><%= roomId %></code></div>
-        <div class="share-row">
-          <code id="roomUrl"><%= roomUrl %></code>
-          <button type="button" id="copyButton">Copy</button>
-          <span class="copy-status" id="copyStatus" hidden>Copied!</span>
-        </div>
-      </div>
+    <div id="playerContainer" class="relative w-full h-full flex items-center justify-center bg-black overflow-hidden group select-none cursor-default">
+        
+        <!-- Underlying Video Element (Custom controls via overlay) -->
+        <video 
+            id="videoElement" 
+            class="w-full h-full object-contain pointer-events-none"
+            src="/movie/<%= movieId %>"
+            preload="metadata"
+            playsinline
+            poster="/movie/<%= movieId %>/thumbnail"
+        ></video>
 
-      <a class="room-back" href="/">← All movies</a>
+        <!-- Fallback Poster / Mock Video Simulation Layer if no stream -->
+        <div id="videoMockOverlay" class="absolute inset-0 bg-zinc-950 flex flex-col items-center justify-center text-center p-6 hidden">
+            <div class="w-20 h-20 rounded-3xl bg-accent/20 border border-accent/40 flex items-center justify-center text-accent mb-4 shadow-xl shadow-accent/10">
+                <svg class="w-10 h-10 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+            <h2 class="text-xl font-bold text-white mb-1"><%= movieTitle %></h2>
+            <p class="text-sm text-zinc-400">Cinematic Watch Room Active</p>
+        </div>
+
+        <!-- Center Big Play/Pause Touch Indicator Animation -->
+        <div id="centerPlayIndicator" class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 transition-opacity duration-300">
+            <div class="w-20 h-20 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white text-3xl shadow-2xl">
+                <span id="centerIcon">▶</span>
+            </div>
+        </div>
+
+        <div id="topOverlay" class="absolute top-0 inset-x-0 p-4 sm:p-6 bg-gradient-to-b from-black/90 via-black/50 to-transparent transition-opacity duration-300 flex items-center justify-between z-20">
+            <div class="flex items-center space-x-3 sm:space-x-4">
+                <a href="/" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white backdrop-blur-md border border-white/10 transition-all shadow-lg flex items-center justify-center group">
+                    <svg class="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+                </a>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h1 class="text-base sm:text-lg font-bold text-white tracking-tight drop-shadow-md line-clamp-1"><%= movieTitle %></h1>
+                        <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
+                            <span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-accent text-white rounded shadow-sm">Host</span>
+                        <% } else { %>
+                            <span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-zinc-800/80 border border-white/10 text-zinc-300 rounded backdrop-blur-md">Viewer</span>
+                        <% } %>
+                    </div>
+                    <div class="flex items-center space-x-2 text-xs text-zinc-400 font-medium">
+                        <span><%= typeof movieYear !== 'undefined' ? movieYear : '2026' %></span>
+                        <span>•</span>
+                        <span><%= typeof movieDuration !== 'undefined' ? movieDuration : '2h 15m' %></span>
+                        <span>•</span>
+                        <span class="text-zinc-300 font-mono">Room: <%= roomId %></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-3">
+                <!-- Participant Count Badge -->
+                <div class="hidden sm:flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-xs text-zinc-300 shadow-lg">
+                    <div class="flex -space-x-1.5 overflow-hidden">
+                        <div class="inline-block w-5 h-5 rounded-full ring-2 ring-black bg-accent text-[10px] font-bold flex items-center justify-center text-white">
+                            <%= typeof userName !== 'undefined' && userName ? userName.charAt(0).toUpperCase() : 'U' %>
+                        </div>
+                        <% if (typeof roomUsers !== 'undefined' && roomUsers.length > 0) { %>
+                            <% roomUsers.slice(0, 2).forEach(u => { %>
+                                <div class="inline-block w-5 h-5 rounded-full ring-2 ring-black bg-zinc-700 text-[10px] font-bold flex items-center justify-center text-white"><%= u.charAt(0).toUpperCase() %></div>
+                            <% }); %>
+                        <% } %>
+                    </div>
+                    <span class="font-medium pl-1"><%= (typeof roomUsers !== 'undefined' && roomUsers.length ? roomUsers.length : 1) %> watching</span>
+                </div>
+
+                <!-- Invite / Share Button -->
+                <button onclick="openInviteModal()" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold backdrop-blur-md border border-white/10 transition-all shadow-lg flex items-center space-x-2 cursor-pointer">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+                    <span class="hidden md:inline">Invite Friends</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="bottomOverlay" class="absolute bottom-0 inset-x-0 p-4 sm:p-6 bg-gradient-to-t from-black/95 via-black/70 to-transparent transition-opacity duration-300 z-20 flex flex-col space-y-3">
+            
+            <!-- Interactive Timeline / Progress Bar -->
+            <div class="relative group/timeline flex items-center cursor-pointer w-full h-3">
+                <div id="timelineBar" class="relative w-full h-1.5 bg-white/20 rounded-full overflow-hidden transition-all group-hover/timeline:h-2.5">
+                    <!-- Buffer Bar -->
+                    <div id="bufferProgress" class="absolute top-0 left-0 h-full bg-white/30 w-1/2 rounded-full"></div>
+                    <!-- Played Bar -->
+                    <div id="playedProgress" class="absolute top-0 left-0 h-full bg-accent w-0 rounded-full transition-all duration-75"></div>
+                </div>
+                <!-- Timeline Thumb Dragger -->
+                <div id="timelineThumb" class="absolute left-0 w-3.5 h-3.5 bg-white rounded-full shadow-lg transform -translate-x-1/2 opacity-0 group-hover/timeline:opacity-100 transition-opacity pointer-events-none"></div>
+            </div>
+
+            <!-- Controls Row -->
+            <div class="flex items-center justify-between">
+                <!-- Left Control Cluster -->
+                <div class="flex items-center space-x-3 sm:space-x-4">
+                    <!-- Play / Pause Button -->
+                    <button id="playPauseBtn" class="p-2 rounded-xl bg-white/10 hover:bg-accent text-white transition-all shadow-md flex items-center justify-center cursor-pointer">
+                        <svg id="playIcon" class="w-6 h-6 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        <svg id="pauseIcon" class="w-6 h-6 hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    </button>
+
+                    <!-- Skip / Replay 10s -->
+                    <button onclick="skipTime(-10)" class="hidden sm:flex p-2 text-zinc-300 hover:text-white transition-colors" title="Rewind 10s">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z"/></svg>
+                    </button>
+                    <button onclick="skipTime(10)" class="hidden sm:flex p-2 text-zinc-300 hover:text-white transition-colors" title="Forward 10s">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.934 12.8a1 1 0 000-1.6l-5.334-4A1 1 0 005 8v8a1 1 0 001.6.8l5.334-4zM19.934 12.8a1 1 0 000-1.6l-5.334-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.334-4z"/></svg>
+                    </button>
+
+                    <!-- Volume Cluster -->
+                    <div class="flex items-center space-x-2 group/vol">
+                        <button id="muteBtn" class="p-2 text-zinc-300 hover:text-white transition-colors">
+                            <svg id="volumeIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/></svg>
+                        </button>
+                        <input id="volumeSlider" type="range" min="0" max="1" step="0.05" value="1" class="w-16 sm:w-20 accent-accent cursor-pointer h-1.5 bg-white/20 rounded-lg">
+                    </div>
+
+                    <!-- Time Display -->
+                    <div class="text-xs font-medium text-zinc-300 tabular-nums">
+                        <span id="currentTime">0:00</span> / <span id="durationTime">0:00</span>
+                    </div>
+                </div>
+
+                <!-- Right Control Cluster -->
+                <div class="flex items-center space-x-2 sm:space-x-3">
+                    <!-- Playback Speed Selector -->
+                    <div class="relative">
+                        <button id="speedBtn" onclick="toggleSpeedMenu()" class="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold text-zinc-200 transition-colors">1x</button>
+                        <div id="speedMenu" class="hidden absolute bottom-full right-0 mb-2 w-28 bg-cardBg border border-zinc-800 rounded-xl shadow-2xl overflow-hidden py-1 z-30">
+                            <button onclick="setSpeed(0.5)" class="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">0.5x</button>
+                            <button onclick="setSpeed(1)" class="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white font-bold text-accent">Normal (1x)</button>
+                            <button onclick="setSpeed(1.25)" class="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">1.25x</button>
+                            <button onclick="setSpeed(1.5)" class="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">1.5x</button>
+                            <button onclick="setSpeed(2)" class="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">2.0x</button>
+                        </div>
+                    </div>
+
+                    <!-- Quality Selector Menu -->
+                    <div class="relative">
+                        <button onclick="toggleQualityMenu()" class="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold text-zinc-200 transition-colors flex items-center space-x-1">
+                            <span id="currentQuality">1080p</span>
+                        </button>
+                        <div id="qualityMenu" class="hidden absolute bottom-full right-0 mb-2 w-32 bg-cardBg border border-zinc-800 rounded-xl shadow-2xl overflow-hidden py-1 z-30">
+                            <div class="px-3 py-1 text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Quality</div>
+                            <button onclick="setQuality('Auto')" class="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white font-medium">Auto</button>
+                            <button onclick="setQuality('1080p')" class="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white font-medium text-accent">1080p HD</button>
+                            <button onclick="setQuality('720p')" class="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white font-medium">720p</button>
+                            <button onclick="setQuality('480p')" class="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white font-medium">480p</button>
+                        </div>
+                    </div>
+
+                    <!-- Fullscreen Button -->
+                    <button id="fullscreenBtn" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all shadow-md cursor-pointer">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5v4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <script>
-    const stage = document.getElementById('roomStage');
-    const copyButton = document.getElementById('copyButton');
-    const copyStatus = document.getElementById('copyStatus');
-    const roomUrl = document.getElementById('roomUrl');
+    <% if (typeof userName === 'undefined' || !userName) { %>
+        <div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div class="bg-cardBg border border-zinc-800/80 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl shadow-black">
+                <div class="w-12 h-12 rounded-2xl bg-accent flex items-center justify-center text-white font-bold text-xl mb-4 shadow-lg shadow-accent/30">
+                    PW
+                </div>
+                <h2 class="text-xl font-bold text-white mb-2 tracking-tight">Join Watch Room</h2>
+                <p class="text-sm text-zinc-400 mb-6">Enter your name to join friends in this cinematic screening room.</p>
+                <form method="post" action="/room/<%= roomId %>/join" class="space-y-4">
+                    <div>
+                        <input
+                            type="text"
+                            name="name"
+                            placeholder="Your display name..."
+                            maxlength="30"
+                            autocomplete="off"
+                            required
+                            autofocus
+                            class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
+                        />
+                    </div>
+                    <button type="submit" class="w-full py-3 bg-accent hover:bg-accentHover text-white font-semibold text-sm rounded-xl shadow-lg shadow-accent/25 transition-all">
+                        Enter Screening Room →
+                    </button>
+                </form>
+            </div>
+        </div>
+    <% } %>
 
-    let hideTimer = null;
+    <div id="inviteModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-zinc-800/80 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl shadow-black relative">
+            <button onclick="closeInviteModal()" class="absolute top-6 right-6 text-zinc-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <div class="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-white mb-4">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-2 tracking-tight">Invite Friends</h3>
+            <p class="text-sm text-zinc-400 mb-6">Share this room link with your friends to watch together in real-time sync.</p>
+            
+            <div class="flex items-center space-x-2 bg-zinc-900 border border-zinc-800 rounded-xl p-2 mb-4">
+                <input id="roomUrlInput" type="text" readonly value="<%= typeof roomUrl !== 'undefined' ? roomUrl : 'https://partywatch.app/room/' + roomId %>" class="w-full bg-transparent text-xs text-zinc-300 px-2 focus:outline-none font-mono" />
+                <button onclick="copyInviteLink()" class="px-4 py-2 bg-accent hover:bg-accentHover text-white text-xs font-semibold rounded-lg shadow transition-all whitespace-nowrap">Copy</button>
+            </div>
+            <p id="copyNotification" class="text-xs text-emerald-400 font-medium hidden">✓ Invite link copied to clipboard!</p>
+        </div>
+    </div>
 
-    function showOverlay() {
-      stage.classList.add('overlay-visible');
-      clearTimeout(hideTimer);
-      hideTimer = setTimeout(hideOverlay, 2500);
-    }
+    <script>
+        const video = document.getElementById('videoElement');
+        const playerContainer = document.getElementById('playerContainer');
+        const topOverlay = document.getElementById('topOverlay');
+        const bottomOverlay = document.getElementById('bottomOverlay');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const playIcon = document.getElementById('playIcon');
+        const pauseIcon = document.getElementById('pauseIcon');
+        const currentTimeEl = document.getElementById('currentTime');
+        const durationTimeEl = document.getElementById('durationTime');
+        const timelineBar = document.getElementById('timelineBar');
+        const playedProgress = document.getElementById('playedProgress');
+        const timelineThumb = document.getElementById('timelineThumb');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const muteBtn = document.getElementById('muteBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const centerPlayIndicator = document.getElementById('centerPlayIndicator');
+        const centerIcon = document.getElementById('centerIcon');
+        const videoMockOverlay = document.getElementById('videoMockOverlay');
 
-    function hideOverlay() {
-      stage.classList.remove('overlay-visible');
-    }
+        let hideTimeout = null;
+        let isControlsVisible = true;
 
-    // Desktop: mouse movement over the room shows the overlay.
-    stage.addEventListener('mousemove', showOverlay);
+        // Fallback simulation if video stream fails or is mock
+        video.addEventListener('error', () => {
+            video.style.display = 'none';
+            videoMockOverlay.classList.remove('hidden');
+        });
 
-    // Mobile: tapping the video reveals the overlay.
-    stage.addEventListener('touchstart', showOverlay, { passive: true });
+        // Format seconds to mm:ss
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "0:00";
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
 
-    copyButton.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(roomUrl.textContent.trim());
-        copyStatus.hidden = false;
-        setTimeout(() => { copyStatus.hidden = true; }, 1500);
-      } catch {
-        // Clipboard API unavailable (e.g. non-secure context); fall back to select.
-        roomUrl.focus();
-        roomUrl.select();
-        document.execCommand('copy');
-        copyStatus.hidden = false;
-        setTimeout(() => { copyStatus.hidden = true; }, 1500);
-      }
-    });
-  </script>
+        // Toggle Play / Pause
+        function togglePlay() {
+            if (video.paused) {
+                video.play().catch(() => {
+                    // Mock play state if video cannot autoplay/stream
+                    videoMockOverlay.classList.remove('hidden');
+                });
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+                centerIcon.textContent = '▶';
+            } else {
+                video.pause();
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+                centerIcon.textContent = '⏸';
+            }
+            triggerCenterAnimation();
+        }
+
+        playPauseBtn.addEventListener('click', togglePlay);
+        playerContainer.addEventListener('click', (e) => {
+            if (e.target.closest('#topOverlay') || e.target.closest('#bottomOverlay')) return;
+            togglePlay();
+        });
+
+        function triggerCenterAnimation() {
+            centerPlayIndicator.style.opacity = '1';
+            setTimeout(() => {
+                centerPlayIndicator.style.opacity = '0';
+            }, 600);
+        }
+
+        // Video time updates
+        video.addEventListener('timeupdate', () => {
+            if (!video.duration) return;
+            const percent = (video.currentTime / video.duration) * 100;
+            playedProgress.style.width = `${percent}%`;
+            timelineThumb.style.left = `${percent}%`;
+            currentTimeEl.textContent = formatTime(video.currentTime);
+        });
+
+        video.addEventListener('loadedmetadata', () => {
+            durationTimeEl.textContent = formatTime(video.duration);
+        });
+
+        // Interactive Timeline Scrubbing
+        timelineBar.addEventListener('click', (e) => {
+            const rect = timelineBar.getBoundingClientRect();
+            const pos = (e.clientX - rect.left) / rect.width;
+            if (video.duration) {
+                video.currentTime = pos * video.duration;
+            }
+        });
+
+        // Skip 10s
+        function skipTime(sec) {
+            if (video.duration) {
+                video.currentTime = Math.min(Math.max(video.currentTime + sec, 0), video.duration);
+            }
+        }
+
+        // Volume control
+        volumeSlider.addEventListener('input', (e) => {
+            video.volume = e.target.value;
+            video.muted = (video.volume === 0);
+        });
+
+        muteBtn.addEventListener('click', () => {
+            video.muted = !video.muted;
+            volumeSlider.value = video.muted ? 0 : video.volume;
+        });
+
+        // Fullscreen
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                playerContainer.requestFullscreen().catch(() => {});
+            } else {
+                document.exitFullscreen().catch(() => {});
+            }
+        });
+
+        // Menus
+        function toggleSpeedMenu() {
+            document.getElementById('speedMenu').classList.toggle('hidden');
+            document.getElementById('qualityMenu').classList.add('hidden');
+        }
+
+        function setSpeed(rate) {
+            video.playbackRate = rate;
+            document.getElementById('speedBtn').textContent = `${rate}x`;
+            document.getElementById('speedMenu').classList.add('hidden');
+        }
+
+        function toggleQualityMenu() {
+            document.getElementById('qualityMenu').classList.toggle('hidden');
+            document.getElementById('speedMenu').classList.add('hidden');
+        }
+
+        function setQuality(qual) {
+            document.getElementById('currentQuality').textContent = qual;
+            document.getElementById('qualityMenu').classList.add('hidden');
+        }
+
+        // Auto-hide controls on inactivity
+        function showControls() {
+            topOverlay.style.opacity = '1';
+            bottomOverlay.style.opacity = '1';
+            playerContainer.style.cursor = 'default';
+            clearTimeout(hideTimeout);
+            hideTimeout = setTimeout(() => {
+                if (!video.paused) {
+                    topOverlay.style.opacity = '0';
+                    bottomOverlay.style.opacity = '0';
+                    playerContainer.style.cursor = 'none';
+                    document.getElementById('speedMenu').classList.add('hidden');
+                    document.getElementById('qualityMenu').classList.add('hidden');
+                }
+            }, 3000);
+        }
+
+        playerContainer.addEventListener('mousemove', showControls);
+        playerContainer.addEventListener('touchstart', showControls, { passive: true });
+
+        // Invite Modal Actions
+        function openInviteModal() {
+            document.getElementById('inviteModal').classList.remove('hidden');
+        }
+
+        function closeInviteModal() {
+            document.getElementById('inviteModal').classList.add('hidden');
+            document.getElementById('copyNotification').classList.add('hidden');
+        }
+
+        function copyInviteLink() {
+            const input = document.getElementById('roomUrlInput');
+            input.select();
+            document.execCommand('copy');
+            const note = document.getElementById('copyNotification');
+            note.classList.remove('hidden');
+            setTimeout(() => { note.classList.add('hidden'); }, 2000);
+        }
+    </script>
 </body>
 </html>

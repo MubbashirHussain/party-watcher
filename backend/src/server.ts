@@ -6,6 +6,7 @@ import formbody from '@fastify/formbody';
 import fastifyStatic from '@fastify/static';
 import { loadEnv } from './config/env.js';
 import { MovieCatalogService } from './services/movie-catalog.service.js';
+import { RoomService } from './services/room.service.js';
 import { movieRoutes } from './routes/movie.route.js';
 import { roomRoutes } from './routes/room.route.js';
 
@@ -28,6 +29,9 @@ export async function buildApp() {
   const catalog = new MovieCatalogService();
   await catalog.load(env.MOVIES_FILE);
 
+  const rooms = new RoomService(env.ROOMS_FILE);
+  await rooms.init();
+
   app.setErrorHandler((error, request, reply) => {
     request.log.error(error, 'Request error');
     reply.status(500).send({ error: 'Internal server error' });
@@ -40,7 +44,7 @@ export async function buildApp() {
 
   await app.register(cookie);
   await app.register(formbody);
-  await app.register(roomRoutes, { catalog });
+  await app.register(roomRoutes, { catalog, rooms });
   app.register(movieRoutes, { catalog });
 
   return { app, env };

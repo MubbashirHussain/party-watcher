@@ -5,6 +5,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(0).default(3000),
   UPLOAD_DIR: z.string().min(1).default('./uploads'),
   MOVIES_FILE: z.string().min(1).default('./data/movies.json'),
+  ROOMS_FILE: z.string().min(1).default('./data/current.json'),
 });
 
 export type Env = z.infer<typeof envSchema>;
