@@ -26,7 +26,7 @@ beforeAll(async () => {
     join(process.cwd(), 'uploads', 'test-movie.mp4'),
     join(process.cwd(), 'uploads', `${VALID_UUID}.mp4`),
   );
-  const built = buildApp();
+  const built = await buildApp();
   app = built.app;
   await app.ready();
   await app.listen({ port: 0, host: '127.0.0.1' });

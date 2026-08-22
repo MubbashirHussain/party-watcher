@@ -1,708 +1,210 @@
-# Initialize Party Watch Codebase
+# Step 2 — Room Creation & Server-Rendered UI
 
-You are initializing a new project called **Party Watch**.
+The previous implementation already completed **Step 1: local MP4 streaming via `GET /movie/:id`**.
 
-The project is intentionally small at this stage. Do **not** over-engineer it or implement future functionality before it is requested.
+Do **not rewrite or replace the existing implementation**. Extend it with the following MVP functionality.
 
-## 1. Goal
+## Goal
 
-Build the foundation for a private "watch with someone special" application.
+Add a minimal server-rendered UI using **EJS** so users can:
 
-The first milestone is extremely simple:
+1. Open `/`
+2. See the movies available in `/uploads`
+3. Select a movie
+4. Create a watch room
+5. Get redirected to `/room/:roomId`
+6. Copy/share that room URL
+7. Other users can open the same URL and see the same room page
 
-> A Node.js server reads video files from a local `/uploads` directory and streams them through an HTTP endpoint.
-
-The first API must be:
-
-```text
-GET /movie/:id
-```
-
-Example:
+## New Flow
 
 ```text
-GET /movie/550e8400-e29b-41d4-a716-446655440000
+GET /
+   ↓
+Movie list
+   ↓
+Create Room
+   ↓
+POST /rooms
+   ↓
+Server generates UUID
+   ↓
+Redirect → /room/:roomId
 ```
 
-The server should locate:
+The **server must generate the room ID** using a secure UUID generator such as:
 
-```text
-/uploads/550e8400-e29b-41d4-a716-446655440000.mp4
+```ts
+crypto.randomUUID()
 ```
 
-and stream it to the client.
+Do not ask the client to generate room IDs.
 
-The video endpoint must support **HTTP Range Requests** so normal HTML5 video playback works correctly, including seeking and partial loading.
+## Room State
 
----
+For this MVP, keep room state **in memory**. No database or Redis.
 
-# 2. Important Scope Rule
+A room should minimally contain:
 
-This is **Step 1 only**.
-
-Do NOT implement:
-
-* WebSockets
-* Watch rooms
-* Playback synchronization
-* Admin controls
-* Authentication
-* User accounts
-* Database
-* Redis
-* HLS
-* DASH
-* Socket.IO
-* Chat
-* Video transcoding
-* Cloud storage
-* Microservices
-* Docker
-* Kubernetes
-* Payment systems
-* CDN
-* Background workers
-* Queue systems
-
-The architecture should allow these features to be added later, but they must **not** be implemented now.
-
-Do not create placeholder implementations for future functionality either.
-
----
-
-# 3. Technology Stack
-
-Use:
-
-* Node.js
-* TypeScript
-* Fastify
-* Zod
-* Pino
-* Vitest
-
-Use modern stable versions compatible with the current Node.js LTS ecosystem.
-
-Use native Node.js filesystem APIs for video streaming.
-
-Do NOT introduce another framework or unnecessary dependency.
-
----
-
-# 4. Project Structure
-
-Create the project with this structure:
-
-```text
-party-watch/
-│
-├── .cursor/
-│   └── rules/
-│       ├── project.mdc
-│       ├── architecture.mdc
-│       ├── typescript.mdc
-│       └── testing.mdc
-│
-├── docs/
-│   ├── README.md
-│   └── ARCHITECTURE.md
-│
-├── src/
-│   ├── server.ts
-│   │
-│   ├── config/
-│   │   └── env.ts
-│   │
-│   ├── routes/
-│   │   └── movie.route.ts
-│   │
-│   ├── services/
-│   │   └── movie.service.ts
-│   │
-│   ├── utils/
-│   │   └── file.utils.ts
-│   │
-│   └── types/
-│       └── movie.types.ts
-│
-├── uploads/
-│   └── .gitkeep
-│
-├── tests/
-│   └── movie/
-│       └── movie.route.test.ts
-│
-├── .env
-├── .env.example
-├── .gitignore
-├── package.json
-├── tsconfig.json
-└── README.md
-```
-
-Do not create additional directories unless they are genuinely required.
-
----
-
-# 5. Cursor Rules
-
-Create the following MDC files under:
-
-```text
-.cursor/rules/
-```
-
-## `project.mdc`
-
-Define the general project rules:
-
-* This is a small private watch-party application.
-* Prefer simple solutions.
-* Do not introduce abstractions without a concrete need.
-* Do not implement future features unless explicitly requested.
-* Keep dependencies minimal.
-* Keep modules focused.
-* Avoid unnecessary design patterns.
-* Do not duplicate business logic.
-* Prefer readable code over clever code.
-
-The rule should clearly state that future architecture must not influence current implementation unnecessarily.
-
----
-
-## `architecture.mdc`
-
-Define the architecture rules:
-
-```text
-Route
-  ↓
-Service
-  ↓
-Filesystem
-```
-
-Responsibilities:
-
-### Routes
-
-Responsible for:
-
-* HTTP request handling
-* Parameter validation
-* HTTP response handling
-* Calling services
-
-Routes must NOT contain complicated filesystem logic.
-
-### Services
-
-Responsible for:
-
-* Finding the requested movie
-* Validating movie existence
-* Obtaining file metadata
-* Creating the appropriate stream
-
-### Utils
-
-Responsible only for reusable low-level filesystem/path helpers.
-
-### Types
-
-Contain shared TypeScript types.
-
-Do not create repositories, controllers, factories, dependency injection containers, or other abstractions unless explicitly required later.
-
----
-
-## `typescript.mdc`
-
-Define TypeScript rules:
-
-* Use strict TypeScript.
-* Avoid `any`.
-* Prefer explicit types for public functions.
-* Use `unknown` where appropriate instead of `any`.
-* Keep functions small.
-* Use async/await where appropriate.
-* Handle errors explicitly.
-* Do not suppress TypeScript errors with `@ts-ignore` or `@ts-expect-error` unless there is a documented reason.
-
----
-
-## `testing.mdc`
-
-Define testing rules:
-
-* Use Vitest.
-* Tests should focus on observable behavior.
-* Test the movie streaming endpoint.
-* Test missing movies.
-* Test invalid movie IDs.
-* Test HTTP Range requests.
-* Do not over-test implementation details.
-
----
-
-# 6. Environment Configuration
-
-Create:
-
-```text
-.env
-.env.example
-```
-
-Use:
-
-```env
-PORT=3000
-UPLOAD_DIR=./uploads
-```
-
-`src/config/env.ts` should validate environment variables with Zod.
-
-Do not hardcode the upload directory or port in application logic.
-
-`.env` should be ignored by Git.
-
-`.env.example` should be committed.
-
----
-
-# 7. Movie Identification
-
-For Step 1, movie files use UUID-based filenames:
-
-```text
-/uploads/<uuid>.mp4
-```
-
-Example:
-
-```text
-/uploads/550e8400-e29b-41d4-a716-446655440000.mp4
-```
-
-The API receives:
-
-```text
-/movie/:id
-```
-
-Validate the ID as a UUID using Zod.
-
-Only allow the expected movie format.
-
-Do not accept arbitrary filesystem paths.
-
-The implementation must prevent path traversal attacks such as:
-
-```text
-/movie/../../secret
-```
-
-or any equivalent traversal technique.
-
----
-
-# 8. Video Streaming
-
-Implement:
-
-```text
-GET /movie/:id
-```
-
-The endpoint must:
-
-1. Validate `id`.
-2. Resolve the corresponding `.mp4` file inside the configured upload directory.
-3. Check whether the file exists.
-4. Read file metadata.
-5. Detect the HTTP `Range` header.
-6. Return a `206 Partial Content` response when a valid range is requested.
-7. Return the appropriate `Content-Range`.
-8. Return `Accept-Ranges: bytes`.
-9. Return the appropriate `Content-Length`.
-10. Return `Content-Type: video/mp4`.
-11. Stream the file using `fs.createReadStream()`.
-12. Avoid loading the entire video into memory.
-
-For requests without a Range header, return a normal streaming response.
-
-Handle invalid ranges appropriately.
-
-Do not use:
-
-```text
-fs.readFile()
-```
-
-to load the complete video into memory.
-
----
-
-# 9. HTTP Behavior
-
-The endpoint should provide correct HTTP semantics.
-
-Expected behavior:
-
-### Existing movie
-
-```text
-200 OK
-```
-
-for a normal request.
-
-### Range request
-
-```text
-206 Partial Content
-```
-
-with appropriate:
-
-```text
-Accept-Ranges
-Content-Range
-Content-Length
-Content-Type
-```
-
-### Movie does not exist
-
-Return:
-
-```text
-404 Not Found
-```
-
-with a small JSON error response.
-
-### Invalid UUID
-
-Return:
-
-```text
-400 Bad Request
-```
-
-with a JSON error response.
-
-### Invalid range
-
-Return an appropriate HTTP error response rather than attempting to create an invalid stream.
-
-Do not expose internal filesystem paths in API errors.
-
----
-
-# 10. Logging
-
-Use Pino through Fastify's logging integration.
-
-Log useful events such as:
-
-* Server startup
-* Movie request
-* Movie not found
-* Invalid request
-* Streaming errors
-
-Do not log sensitive information unnecessarily.
-
-Do not log the full filesystem path if it exposes unnecessary server internals.
-
----
-
-# 11. Error Handling
-
-Implement centralized Fastify error handling where appropriate.
-
-Errors returned to clients should be simple and safe.
-
-Example:
-
-```json
+```ts
 {
-  "error": "Movie not found"
+  id: string;
+  movieId: string;
+  adminUserId: string;
 }
 ```
 
-Do not expose:
+Design the room state so playback state can be added later.
 
-* stack traces
-* absolute filesystem paths
-* internal implementation details
+## User Identity
 
-in production responses.
+Do not implement authentication.
 
----
+Generate a lightweight anonymous user/session ID and persist it using a cookie.
 
-# 12. Testing
+The user who creates the room becomes the initial admin.
 
-Create tests using Vitest.
+Do NOT put an admin secret/key in the room URL.
 
-At minimum test:
-
-### Test 1 — Movie streaming
-
-Given a test MP4 file:
+The shared URL should simply be:
 
 ```text
-/uploads/test-movie.mp4
+/room/:roomId
 ```
 
-verify that the endpoint can return the movie stream.
+## Server-Rendered Pages
 
-### Test 2 — Missing movie
+Use EJS templates.
 
-Request a valid UUID that does not exist and verify:
+Add:
 
 ```text
-404
+GET /
 ```
 
-### Test 3 — Invalid UUID
+Render a movie-selection page showing available `.mp4` files from `/uploads`.
 
-Request:
+Add:
 
 ```text
-/movie/not-a-uuid
+POST /rooms
 ```
 
-and verify:
+Create the room and redirect to:
 
 ```text
-400
+GET /room/:roomId
 ```
 
-### Test 4 — Range request
+The room page should:
 
-Send a request with something similar to:
+* Show the selected movie
+* Render the video player
+* Show the room URL
+* Provide a copy-link button
+* Indicate whether the current visitor is the admin
+* Use the existing `/movie/:id` streaming endpoint for video playback
 
-```http
-Range: bytes=0-1023
-```
+The movie URL must **not be exposed as a direct filesystem/storage URL**.
 
-and verify:
+## Templates
+
+Add a simple structure such as:
 
 ```text
-206
+src/
+└── views/
+    ├── home.ejs
+    └── room.ejs
 ```
 
-and appropriate range headers.
+Keep the UI intentionally simple. No frontend framework.
 
-Tests should not depend on a real large movie file.
+Small vanilla JavaScript is fine for:
 
-Create a small test fixture if necessary.
+* Copying the room URL
+* Basic UI interactions
 
----
+## Routes
 
-# 13. README
-
-The root `README.md` should contain only concise project-level information.
-
-Include:
-
-* Project name
-* Purpose
-* Requirements
-* Installation
-* Development commands
-* Environment variables
-* How to add a movie
-* API example
-* Current scope
-
-Example usage:
+Add only what is required:
 
 ```text
-npm install
-npm run dev
+GET  /
+POST /rooms
+GET  /room/:roomId
 ```
 
-Then:
+Keep the existing:
 
 ```text
-GET http://localhost:3000/movie/<uuid>
+GET /movie/:id
 ```
 
----
+unchanged unless a small integration change is genuinely required.
 
-# 14. Documentation
+## Room Not Found
 
-All project documentation files other than the root README should live inside:
+If someone opens an invalid room:
+
+```text
+GET /room/:roomId
+```
+
+return a simple `404` page/message.
+
+## Important Scope
+
+Do NOT implement yet:
+
+* WebSockets
+* Playback synchronization
+* Play/pause synchronization
+* Seeking synchronization
+* Admin transfer
+* Chat
+* Database
+* Redis
+* Authentication
+* Multiple admins
+* HLS
+* Video transcoding
+
+This step is only about establishing the **room + UI foundation**.
+
+The next step will use the existing room structure to synchronize playback between users.
+
+## Documentation
+
+Update the existing documentation under:
 
 ```text
 /docs
 ```
 
-Create:
+Do not create documentation files in the project root other than the existing root README.
+
+Document the new flow:
 
 ```text
-docs/README.md
-docs/ARCHITECTURE.md
+User → Home → Select Movie → Create Room → /room/:roomId
+                                      ↓
+                              Other users join
 ```
 
-`docs/ARCHITECTURE.md` should explain the current architecture and explicitly document that this is **Step 1**.
-
-It should also describe the planned conceptual direction without implementing it:
-
-```text
-Step 1
-Local video → HTTP streaming
-
-Step 2
-Watch session → WebSocket → synchronized playback
-
-Future
-Admin controls → play/pause/seek/quality
-```
-
-Do not implement Step 2.
-
----
-
-# 15. Package Scripts
-
-Provide useful scripts such as:
-
-```json
-{
-  "dev": "...",
-  "build": "...",
-  "start": "...",
-  "test": "...",
-  "test:watch": "...",
-  "typecheck": "..."
-}
-```
-
-Use an appropriate development runner for TypeScript.
-
-The production build should compile cleanly.
-
----
-
-# 16. Code Quality
-
-Before finishing:
-
-* Run the TypeScript type checker.
-* Run tests.
-* Run the production build.
-* Fix all errors.
-* Make sure there are no unnecessary dependencies.
-* Make sure imports are clean.
-* Make sure `.env` is ignored.
-* Make sure `/uploads` itself remains in Git through `.gitkeep`.
-* Make sure no generated build artifacts are committed.
-
----
-
-# 17. Important Future Constraint
-
-The application will eventually support synchronized watch sessions.
-
-The conceptual future architecture is:
-
-```text
-                    Node.js
-                       │
-             ┌─────────┴─────────┐
-             │                   │
-        Video API           Watch Sessions
-             │                   │
-        HTTP Stream          WebSocket
-             │                   │
-         Movie File       Admin + Viewers
-```
-
-The server will eventually become the source of truth for:
-
-```text
-play / pause
-current timeline
-seek
-video
-quality
-```
-
-However, **do not implement any of this now**.
-
-The current implementation should simply provide a reliable video streaming foundation that can later be integrated with a watch-session system.
-
----
-
-# 18. Final Verification
+## Verification
 
 After implementation, verify:
 
-```text
-npm install
-npm run typecheck
-npm test
-npm run build
-```
+1. `/` displays uploaded movies.
+2. Selecting a movie creates a room.
+3. Room IDs are generated server-side.
+4. Creator receives an anonymous session ID and becomes admin.
+5. Creator is redirected to `/room/:roomId`.
+6. Opening the same room URL from another browser shows the same movie/room.
+7. The second browser is treated as a viewer.
+8. The video is streamed through the existing `/movie/:id` endpoint.
+9. Invalid room IDs return 404.
+10. Existing Step 1 tests and functionality continue to work.
 
-All must pass.
-
-Also manually verify:
-
-1. Put an MP4 file inside `/uploads`.
-2. Rename it to a UUID-based filename.
-3. Start the server.
-4. Open the `/movie/:id` endpoint in a browser/video player.
-5. Confirm playback works.
-6. Confirm seeking works.
-7. Confirm the browser can request byte ranges.
-8. Confirm missing files return 404.
-9. Confirm invalid IDs return 400.
-
----
-
-# 19. Agent Behavior Rules
-
-Before modifying files:
-
-1. Inspect the existing repository.
-2. Do not overwrite existing user code unnecessarily.
-3. If this is an empty repository, initialize the project according to this specification.
-4. If something already exists, adapt it instead of blindly recreating it.
-5. Do not add features outside the requested scope.
-6. Do not ask for permission for normal implementation decisions covered by this specification.
-7. If a dependency is genuinely necessary, use the smallest reasonable option.
-8. Keep the implementation simple and production-quality.
-9. Do not create speculative abstractions for future features.
-10. At the end, report exactly what was created, what was tested, and any remaining issues.
-
-## Definition of Done
-
-The project is complete when:
-
-```text
-Node.js + TypeScript project
-        ↓
-Fastify server
-        ↓
-GET /movie/:id
-        ↓
-UUID validation
-        ↓
-Safe file resolution
-        ↓
-HTTP Range support
-        ↓
-Streaming via createReadStream()
-        ↓
-Tests passing
-        ↓
-TypeScript build passing
-```
-
-Do not proceed beyond this milestone.
+Keep the implementation simple. **Do not rewrite Step 1.**

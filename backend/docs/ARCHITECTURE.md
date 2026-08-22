@@ -34,16 +34,81 @@ GET /movie/:id
 - Streaming uses `fs.createReadStream()` — the video is never fully loaded
   into memory.
 
+## Current Implementation — Step 2
+
+Step 2 adds a minimal server-rendered UI (EJS) for creating and joining watch
+rooms. Room state lives in memory only; there is no database or Redis yet.
+
+```
+User → Home (GET /) → Select Movie → POST /rooms → redirect → /room/:roomId
+                                                              ↓
+                                                    Other users join
+```
+
+### Routes
+
+- `GET /` — lists the available movies (`.mp4` files in the uploads
+  directory) as a movie-selection page.
+- `POST /rooms` — validates the chosen movie, generates the room ID
+  server-side with `crypto.randomUUID()`, sets an anonymous session cookie,
+  and redirects (302) to `/room/:roomId`.
+- `GET /room/:roomId` — renders the room page (video player, shareable room
+  URL, copy button, admin/viewer indicator). Invalid room IDs return a 404
+  page.
+- `GET /movie/:id` — unchanged from Step 1. The room page points its
+  `<video>` element at this endpoint; the underlying filesystem path is never
+  exposed to the browser.
+
+### Room state
+
+Rooms are kept in an in-memory `Map` inside `RoomService`:
+
+```ts
+{
+  id: string;        // server-generated UUID
+  movieId: string;   // UUID of the movie being watched
+  adminUserId: string; // anonymous session ID of the room creator
+}
+```
+
+Playback state (play/pause, currentTime, seek) is intentionally **not** part
+of the room yet — it will be layered on in a later step alongside WebSocket
+synchronization.
+
+### User identity
+
+There is no authentication. Each visitor receives a lightweight anonymous
+session ID generated with `crypto.randomUUID()` and persisted in an HttpOnly
+`pw_session` cookie. The user who creates a room becomes its initial admin;
+anyone else who opens the same room URL is treated as a viewer. The shared
+room URL contains no secret — it is simply `/room/:roomId`.
+
+### Templates
+
+EJS templates live in `src/views/`:
+
+- `home.ejs` — movie-selection page
+- `room.ejs` — room page with the video player, shareable URL, copy button,
+  and admin/viewer badge
+- `not-found.ejs` — 404 page
+- `error.ejs` — generic error page
+
+The UI is intentionally simple: no frontend framework, just a small amount of
+vanilla JavaScript for the copy-link button.
+
 ## Planned Conceptual Direction
 
-These are future directions only. Nothing beyond Step 1 is implemented.
+These are future directions only. Nothing beyond Step 2 is implemented.
 
 ```
 Step 1
 Local video → HTTP streaming
 
 Step 2
-Watch session → WebSocket → synchronized playback
+Watch room → server-rendered UI → in-memory room state
+
+Step 3
+WebSocket → synchronized playback
 
 Future
 Admin controls → play/pause/seek/quality

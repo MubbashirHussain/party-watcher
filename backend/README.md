@@ -2,8 +2,9 @@
 
 A small private application for watching videos with someone special.
 
-**Current scope (Step 1):** A Node.js server that streams MP4 files from a local
-`uploads` directory over HTTP, with full support for HTTP Range requests.
+**Current scope (Steps 1–2):** A Node.js server that streams MP4 files from a
+local `uploads` directory over HTTP (with full HTTP Range support), plus a
+minimal server-rendered UI for creating and sharing watch rooms.
 
 ## Requirements
 
@@ -48,6 +49,19 @@ You can generate a UUID with:
 node -e "console.log(crypto.randomUUID())"
 ```
 
+## Using the App
+
+1. Open <http://localhost:3000/> — the home page lists the movies found in
+   `uploads/`.
+2. Pick a movie — the server creates a watch room and redirects you to
+   `/room/:roomId`.
+3. Share the room URL with someone else. Anyone who opens the same URL sees
+   the same movie page.
+
+The user who creates a room becomes its admin; other visitors are viewers.
+There is no authentication — visitors are tracked with an anonymous session
+cookie. Room state lives in memory and is lost on restart.
+
 ## API
 
 ```http
@@ -65,7 +79,8 @@ seeking work in browsers.
 
 ## Current Scope
 
-Step 1 only: local video streaming over HTTP. Watch sessions, WebSockets,
-synchronization, and related features are not implemented yet.
+Steps 1–2 only: local video streaming over HTTP and the watch-room + UI
+foundation. WebSockets, playback synchronization, chat, and a database are
+not implemented yet.
 
 See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for details.
