@@ -85,16 +85,17 @@
                         id="searchInput" 
                         placeholder="Search movies..." 
                         autocomplete="off"
+                        oninput="filterMovies()"
                         class="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 transition-all shadow-inner"
                     >
                 </div>
 
                 <div class="flex items-center space-x-2 overflow-x-auto pb-2 sm:pb-0 scrollbar-none">
-                    <button onclick="filterCategory('all')" class="category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-800 text-white hover:bg-zinc-700 transition-colors whitespace-nowrap active shadow-sm">All Genres</button>
-                    <button onclick="filterCategory('Sci-Fi')" class="category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900/60 text-zinc-400 border border-zinc-800/80 hover:bg-zinc-800 hover:text-white transition-colors whitespace-nowrap">Sci-Fi</button>
-                    <button onclick="filterCategory('Action')" class="category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900/60 text-zinc-400 border border-zinc-800/80 hover:bg-zinc-800 hover:text-white transition-colors whitespace-nowrap">Action</button>
-                    <button onclick="filterCategory('Drama')" class="category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900/60 text-zinc-400 border border-zinc-800/80 hover:bg-zinc-800 hover:text-white transition-colors whitespace-nowrap">Drama</button>
-                    <button onclick="filterCategory('Animation')" class="category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900/60 text-zinc-400 border border-zinc-800/80 hover:bg-zinc-800 hover:text-white transition-colors whitespace-nowrap">Animation</button>
+                    <button onclick="filterCategory('all')" id="btn-all" class="category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-800 text-white hover:bg-zinc-700 transition-colors whitespace-nowrap shadow-sm">All Genres</button>
+                    <button onclick="filterCategory('Sci-Fi')" id="btn-Sci-Fi" class="category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900/60 text-zinc-400 border border-zinc-800/80 hover:bg-zinc-800 hover:text-white transition-colors whitespace-nowrap">Sci-Fi</button>
+                    <button onclick="filterCategory('Action')" id="btn-Action" class="category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900/60 text-zinc-400 border border-zinc-800/80 hover:bg-zinc-800 hover:text-white transition-colors whitespace-nowrap">Action</button>
+                    <button onclick="filterCategory('Drama')" id="btn-Drama" class="category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900/60 text-zinc-400 border border-zinc-800/80 hover:bg-zinc-800 hover:text-white transition-colors whitespace-nowrap">Drama</button>
+                    <button onclick="filterCategory('Animation')" id="btn-Animation" class="category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900/60 text-zinc-400 border border-zinc-800/80 hover:bg-zinc-800 hover:text-white transition-colors whitespace-nowrap">Animation</button>
                 </div>
             </div>
 
@@ -163,20 +164,20 @@
             <h3 class="text-xl font-bold text-white mb-1 tracking-tight">Create Screening Room</h3>
             <p id="modalMovieTitle" class="text-sm text-zinc-400 mb-6 font-medium">Configure settings for your watch room.</p>
             
-            <form id="createRoomForm" action="/rooms" method="POST" class="space-y-4">
+            <form id="createRoomForm" action="/rooms" method="POST" onsubmit="return validateRoomForm(event)" class="space-y-4">
                 <input type="hidden" id="modalMovieId" name="movieId" value="" />
                 
                 <div>
                     <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2">Room Type</label>
                     <div class="grid grid-cols-2 gap-3">
                         <label class="cursor-pointer">
-                            <input type="radio" name="roomType" value="public" checked onchange="toggleRoomType('public')" class="peer sr-only" />
+                            <input type="radio" name="roomType" id="typePublic" value="public" checked onchange="toggleRoomType('public')" class="peer sr-only" />
                             <div class="px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-center text-xs font-semibold text-zinc-400 peer-checked:bg-zinc-800 peer-checked:border-accent peer-checked:text-white transition-all shadow-sm">
                                 Public Room
                             </div>
                         </label>
                         <label class="cursor-pointer">
-                            <input type="radio" name="roomType" value="private" onchange="toggleRoomType('private')" class="peer sr-only" />
+                            <input type="radio" name="roomType" id="typePrivate" value="private" onchange="toggleRoomType('private')" class="peer sr-only" />
                             <div class="px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-center text-xs font-semibold text-zinc-400 peer-checked:bg-zinc-800 peer-checked:border-accent peer-checked:text-white transition-all shadow-sm">
                                 Private Room
                             </div>
@@ -185,14 +186,16 @@
                 </div>
 
                 <div id="passwordSection" class="hidden">
-                    <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">Room Password</label>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">Room Password (Min 4 chars)</label>
                     <input 
                         type="password" 
                         id="roomPasswordInput" 
                         name="password" 
-                        placeholder="Enter password (e.g. 1234)" 
+                        placeholder="Enter password (e.g. secret123)" 
+                        oninput="checkPasswordCondition()"
                         class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all" 
                     />
+                    <p id="passwordError" class="text-xs text-accent mt-1 hidden">Password must be at least 4 characters long.</p>
                 </div>
 
                 <div class="pt-4 flex items-center justify-end space-x-3">
@@ -272,10 +275,11 @@
         function openCreateRoomModal(movieId, movieTitle) {
             document.getElementById('modalMovieId').value = movieId;
             document.getElementById('modalMovieTitle').textContent = `Movie: ${movieTitle}`;
-            // Reset form state
-            document.querySelector('input[name="roomType"][value="public"]').checked = true;
+            document.getElementById('typePublic').checked = true;
+            document.getElementById('typePrivate').checked = false;
             toggleRoomType('public');
             document.getElementById('roomPasswordInput').value = '';
+            document.getElementById('passwordError').classList.add('hidden');
             document.getElementById('createRoomModal').classList.remove('hidden');
         }
 
@@ -286,6 +290,9 @@
         function toggleRoomType(type) {
             const passwordSection = document.getElementById('passwordSection');
             const passwordInput = document.getElementById('roomPasswordInput');
+            const passwordError = document.getElementById('passwordError');
+            
+            passwordError.classList.add('hidden');
             if (type === 'private') {
                 passwordSection.classList.remove('hidden');
                 passwordInput.setAttribute('required', 'required');
@@ -296,42 +303,97 @@
             }
         }
 
-        function filterMovies() {
-            if (!movieGrid) return;
-            const query = searchInput.value.trim().toLowerCase();
-            const cards = movieGrid.getElementsByClassName('movie-card');
-            
-            for (const card of cards) {
-                const title = card.dataset.title || '';
-                const genre = card.dataset.genre || '';
-                const matchesQuery = query === '' || title.includes(query);
-                const matchesCategory = currentCategory === 'all' || genre.toLowerCase() === currentCategory.toLowerCase();
-                
-                if (matchesQuery && matchesCategory) {
-                    card.style.display = 'flex';
-                } else {
-                    card.style.display = 'none';
-                }
+        // Single condition enforcement: if password has content, force room type to private
+        function checkPasswordCondition() {
+            const passwordInput = document.getElementById('roomPasswordInput');
+            const typePrivate = document.getElementById('typePrivate');
+            const typePublic = document.getElementById('typePublic');
+            const passwordSection = document.getElementById('passwordSection');
+
+            if (passwordInput.value.trim().length > 0) {
+                passwordSection.classList.remove('hidden');
+                typePrivate.checked = true;
+                typePublic.checked = false;
             }
         }
 
-        if (searchInput) {
-            searchInput.addEventListener('input', filterMovies);
+        function validateRoomForm(event) {
+            event.preventDefault();
+            const passwordInput = document.getElementById('roomPasswordInput');
+            const passwordError = document.getElementById('passwordError');
+            const movieId = document.getElementById('modalMovieId').value;
+            const typePrivate = document.getElementById('typePrivate');
+            const typePublic = document.getElementById('typePublic');
+            const val = passwordInput.value.trim();
+
+            // Enforce condition: if there is any password text, validate its length and force private state
+            if (val.length > 0) {
+                typePrivate.checked = true;
+                typePublic.checked = false;
+                if (val.length < 4) {
+                    passwordError.classList.remove('hidden');
+                    passwordInput.focus();
+                    return false;
+                }
+            } else {
+                passwordInput.value = '';
+            }
+
+            const payload = {
+                movieId: movieId,
+                visibility: typePrivate.checked ? 'private' : 'public'
+            };
+            if (val.length > 0) {
+                payload.password = val;
+            }
+
+            fetch('/rooms', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            }).then(response => {
+                if (response.ok) {
+                    window.location.href = response.url;
+                } else {
+                    alert('Error creating room. Please check your settings.');
+                }
+            }).catch(err => {
+                console.error(err);
+                alert('An error occurred.');
+            });
+
+            return false;
         }
 
         function filterCategory(category) {
             currentCategory = category;
-            
-            const buttons = document.querySelectorAll('.category-btn');
-            buttons.forEach(btn => {
-                if (btn.textContent.trim().toLowerCase() === category.toLowerCase() || (category === 'all' && btn.textContent.trim() === 'All Genres')) {
-                    btn.className = 'category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-800 text-white transition-colors whitespace-nowrap shadow-sm';
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.className = "category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900/60 text-zinc-400 border border-zinc-800/80 hover:bg-zinc-800 hover:text-white transition-colors whitespace-nowrap";
+            });
+            const activeBtn = document.getElementById(`btn-${category}`);
+            if (activeBtn) {
+                activeBtn.className = "category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-800 text-white hover:bg-zinc-700 transition-colors whitespace-nowrap shadow-sm";
+            }
+            filterMovies();
+        }
+
+        function filterMovies() {
+            if (!movieGrid) return;
+            const query = searchInput ? searchInput.value.toLowerCase() : '';
+            const cards = movieGrid.querySelectorAll('.movie-card');
+            cards.forEach(card => {
+                const title = card.getAttribute('data-title') || '';
+                const genre = card.getAttribute('data-genre') || '';
+                const matchesSearch = title.includes(query);
+                const matchesCategory = (currentCategory === 'all' || genre === currentCategory);
+                if (matchesSearch && matchesCategory) {
+                    card.style.display = 'flex';
                 } else {
-                    btn.className = 'category-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900/60 text-zinc-400 border border-zinc-800/80 hover:bg-zinc-800 hover:text-white transition-colors whitespace-nowrap';
+                    card.style.display = 'none';
                 }
             });
-
-            filterMovies();
         }
     </script>
 </body>

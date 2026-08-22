@@ -135,41 +135,42 @@ export async function roomRoutes(
     },
   );
 
-  app.post<{ Body: { movieId?: string; visibility?: string; password?: string } }>(
-    "/rooms",
-    async (request, reply) => {
-      const parsed = createRoomBodySchema.safeParse(request.body ?? {});
+  app.post<{
+    Body: { movieId?: string; visibility?: string; password?: string };
+  }>("/rooms", async (request, reply) => {
+    const parsed = createRoomBodySchema.safeParse(request.body ?? {});
+    console.log("-----------------------", parsed);
 
-      if (!parsed.success) {
-        return reply.status(400).view("error", {
-          message:
-            "Invalid room settings. Go back and pick a movie (private rooms need a password of 4–72 characters).",
+    if (!parsed.success) {
+      return reply.status(400).view("error", {
+        message:
+          "Invalid room settings. Go back and pick a movie (private rooms need a password of 4–72 characters).",
+      });
+    }
+    const { movieId, visibility, password } = parsed.data;
+
+    try {
+      await getMovie(catalog, UPLOAD_DIR, movieId);
+    } catch (err) {
+      if (
+        err instanceof MovieNotFoundError ||
+        err instanceof MovieNotInCatalogError
+      ) {
+        return reply.status(404).view("not-found", {
+          message: "That movie does not exist.",
         });
       }
-      const { movieId, visibility, password } = parsed.data;
+      throw err;
+    }
 
-      try {
-        await getMovie(catalog, UPLOAD_DIR, movieId);
-      } catch (err) {
-        if (
-          err instanceof MovieNotFoundError ||
-          err instanceof MovieNotInCatalogError
-        ) {
-          return reply.status(404).view("not-found", {
-            message: "That movie does not exist.",
-          });
-        }
-        throw err;
-      }
-
-      const userId = getOrCreateUserId(request, reply);
-      const room = await rooms.createRoom(movieId, userId, {
-        visibility,
-        password,
-      });
-      return reply.redirect(`/room/${room.id}`);
-    },
-  );
+    const userId = getOrCreateUserId(request, reply);
+    const room = await rooms.createRoom(movieId, userId, {
+      visibility,
+      password,
+    });
+    console.log("Room created: ", room);
+    return reply.redirect(`/room/${room.id}`);
+  });
 
   /**
    * Join a room with a display name. The name is stored against the user's
