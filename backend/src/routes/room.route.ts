@@ -6,22 +6,30 @@ import ejs from 'ejs';
 import { z } from 'zod';
 import { loadEnv } from '../config/env.js';
 import { getMovie, MovieNotFoundError } from '../services/movie.service.js';
-import { listMovies, RoomNotFoundError, RoomService } from '../services/room.service.js';
+import {
+  MovieNotInCatalogError,
+  type MovieCatalogService,
+} from '../services/movie-catalog.service.js';
+import { RoomNotFoundError, RoomService } from '../services/room.service.js';
 import { getOrCreateUserId } from '../utils/session.utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const createRoomBodySchema = z.object({
-  movieId: z.string().uuid(),
+  movieId: z.string().min(1).regex(/^[a-z0-9-]+$/, 'Invalid movie ID'),
 });
 
 const roomParamsSchema = z.object({
   roomId: z.string().uuid(),
 });
 
-export async function roomRoutes(app: FastifyInstance): Promise<void> {
+export async function roomRoutes(
+  app: FastifyInstance,
+  opts: { catalog: MovieCatalogService },
+): Promise<void> {
   const { UPLOAD_DIR } = loadEnv();
   const rooms = new RoomService();
+  const { catalog } = opts;
 
   app.register(view, {
     engine: { ejs },
@@ -29,16 +37,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get<{ Querystring: { movieId?: string } }>('/', async (request, reply) => {
-    let movies: string[];
-    try {
-      movies = await listMovies(UPLOAD_DIR);
-    } catch (err) {
-      request.log.error(err, 'Failed to list movies');
-      return reply.status(500).view('error', {
-        message: 'Could not load the movie list.',
-      });
-    }
-    return reply.view('home', { movies });
+    return reply.view('home', { movies: catalog.getAll() });
   });
 
   app.post<{ Body: { movieId?: string } }>('/rooms', async (request, reply) => {
@@ -51,9 +50,9 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     const { movieId } = parsed.data;
 
     try {
-      await getMovie(UPLOAD_DIR, movieId);
+      await getMovie(catalog, UPLOAD_DIR, movieId);
     } catch (err) {
-      if (err instanceof MovieNotFoundError) {
+      if (err instanceof MovieNotFoundError || err instanceof MovieNotInCatalogError) {
         return reply.status(404).view('not-found', {
           message: 'That movie does not exist.',
         });
@@ -86,6 +85,15 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       throw err;
     }
 
+    let metadata;
+    try {
+      metadata = catalog.getBySlug(room.movieId);
+    } catch {
+      return reply.status(404).view('not-found', {
+        message: 'The movie for this room is no longer available.',
+      });
+    }
+
     const userId = getOrCreateUserId(request, reply);
     const isAdmin = userId === room.adminUserId;
     const roomUrl = `${request.protocol}://${request.host}/room/${room.id}`;
@@ -93,6 +101,10 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     return reply.view('room', {
       roomId: room.id,
       movieId: room.movieId,
+      movieTitle: metadata.title,
+      movieYear: metadata.year,
+      movieDuration: metadata.duration,
+      thumbnailUrl: `/movie/${room.movieId}/thumbnail`,
       roomUrl,
       isAdmin,
     });

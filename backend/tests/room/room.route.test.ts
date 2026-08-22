@@ -1,4 +1,4 @@
-import { copyFile, rm } from 'node:fs/promises';
+import { copyFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
@@ -8,8 +8,9 @@ import { generateFixture } from '../fixtures/generate-fixture.js';
 
 process.env.UPLOAD_DIR = './uploads';
 process.env.PORT = '0';
+process.env.MOVIES_FILE = './data/movies.json';
 
-const VALID_UUID = '0e00beef-0000-4000-8000-000000000001';
+const SLUG = 'interstellar';
 
 let app: FastifyInstance;
 let baseUrl: string;
@@ -19,8 +20,14 @@ beforeAll(async () => {
   generateFixture();
   await copyFile(
     join(process.cwd(), 'uploads', 'test-movie.mp4'),
-    join(process.cwd(), 'uploads', `${VALID_UUID}.mp4`),
+    join(process.cwd(), 'uploads', 'interstellar.mp4'),
   );
+  const jpeg = Buffer.from(
+    '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==',
+    'base64',
+  );
+  await writeFile(join(process.cwd(), 'uploads', 'interstellar.jpg'), jpeg);
+
   const built = await buildApp();
   app = built.app;
   await app.ready();
@@ -34,18 +41,23 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app.close();
-  await rm(join(process.cwd(), 'uploads', `${VALID_UUID}.mp4`), { force: true });
+  await rm(join(process.cwd(), 'uploads', 'interstellar.mp4'), { force: true });
 });
 
 describe('GET /', () => {
-  it('renders the movie list page', async () => {
+  it('renders the modern movie grid from catalog metadata', async () => {
     const res = await fetch(baseUrl);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/html');
     const html = await res.text();
     expect(html).toContain('Party Watch');
-    // The uploaded fixture should be listed by its UUID.
-    expect(html).toContain(VALID_UUID);
+    expect(html).toContain('Watch together.');
+    expect(html).toContain('Search movies');
+    expect(html).toContain('Interstellar');
+    expect(html).toContain('2014 · 2h 49m');
+    expect(html).toContain('/movie/interstellar/thumbnail');
+    // Movie cards are identified by slug, not UUID.
+    expect(html).toContain('name="movieId" value="interstellar"');
   });
 });
 
@@ -54,7 +66,7 @@ describe('POST /rooms', () => {
     const res = await fetch(`${baseUrl}/rooms`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ movieId: VALID_UUID }),
+      body: new URLSearchParams({ movieId: SLUG }),
       redirect: 'manual',
     });
 
@@ -62,28 +74,25 @@ describe('POST /rooms', () => {
     const location = res.headers.get('location');
     expect(location).toMatch(/^\/room\/[0-9a-f-]{36}$/);
 
-    // The creator gets an anonymous session cookie.
     const setCookie = res.headers.get('set-cookie');
     expect(setCookie).toMatch(/^pw_session=[0-9a-f-]{36};/);
   });
 
-  it('rejects a movie that does not exist', async () => {
+  it('rejects a movie not in the catalog', async () => {
     const res = await fetch(`${baseUrl}/rooms`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        movieId: '00000000-0000-4000-8000-000000000000',
-      }),
+      body: new URLSearchParams({ movieId: 'not-in-catalog' }),
       redirect: 'manual',
     });
     expect(res.status).toBe(404);
   });
 
-  it('rejects a non-UUID movie ID', async () => {
+  it('rejects an invalid movie ID', async () => {
     const res = await fetch(`${baseUrl}/rooms`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ movieId: 'not-a-uuid' }),
+      body: new URLSearchParams({ movieId: 'not a valid slug!' }),
       redirect: 'manual',
     });
     expect(res.status).toBe(400);
@@ -95,7 +104,7 @@ describe('GET /room/:roomId', () => {
     const res = await fetch(`${baseUrl}/rooms`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ movieId: VALID_UUID }),
+      body: new URLSearchParams({ movieId: SLUG }),
       redirect: 'manual',
     });
     const location = res.headers.get('location')!;
@@ -104,7 +113,7 @@ describe('GET /room/:roomId', () => {
     return { roomId, cookie };
   }
 
-  it('shows the movie, room URL, copy button, and admin badge for the creator', async () => {
+  it('renders the room page with movie metadata, overlay, and host badge for the creator', async () => {
     const { roomId, cookie } = await createRoom();
 
     const res = await fetch(`${baseUrl}/room/${roomId}`, {
@@ -113,21 +122,26 @@ describe('GET /room/:roomId', () => {
     expect(res.status).toBe(200);
     const html = await res.text();
 
-    expect(html).toContain('You are the admin');
-    expect(html).toContain(`/movie/${VALID_UUID}`);
+    expect(html).toContain('Interstellar');
+    expect(html).toContain('2014 · 2h 49m');
+    expect(html).toContain('Host');
+    expect(html).toContain(`/movie/interstellar`);
     expect(html).toContain(`${baseUrl}/room/${roomId}`);
     expect(html).toContain('Copy');
+    // The room overlay must start hidden.
+    expect(html).toMatch(/roomStage/);
+    expect(html).toMatch(/roomOverlay/);
+    expect(html).toMatch(/overlay-visible/); // class toggled by JS
   });
 
   it('treats a different visitor as a viewer', async () => {
     const { roomId } = await createRoom();
 
-    // No cookie → new anonymous identity → viewer.
     const res = await fetch(`${baseUrl}/room/${roomId}`);
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain('You are a viewer');
-    expect(html).not.toContain('You are the admin');
+    expect(html).toContain('Viewer');
+    expect(html).not.toContain('>Host<');
   });
 
   it('returns 404 for an invalid room ID', async () => {

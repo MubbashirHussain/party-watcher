@@ -4,31 +4,72 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Party Watch</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
-    ul { list-style: none; padding: 0; }
-    li { margin: 0.5rem 0; }
-    a { color: #0b57d0; }
-    .empty { color: #666; }
-  </style>
+  <link rel="stylesheet" href="/static/css/app.css" />
 </head>
 <body>
-  <h1>Party Watch</h1>
+  <div class="container">
+    <header class="page-header">
+      <span class="brand">Party Watch</span>
+      <span class="nav-link">Watch together</span>
+    </header>
 
-  <% if (movies.length === 0) { %>
-    <p class="empty">No movies found in <code>uploads/</code>. Add an MP4 named after a UUID and reload.</p>
-  <% } else { %>
-    <p>Pick a movie to start a watch room:</p>
-    <ul>
-      <% for (const id of movies) { %>
-        <li>
-          <form method="post" action="/rooms">
-            <input type="hidden" name="movieId" value="<%= id %>" />
-            <button type="submit"><%= id %></button>
-          </form>
-        </li>
-      <% } %>
-    </ul>
-  <% } %>
+    <section class="hero">
+      <h1>Watch together.</h1>
+      <p>Pick a movie and create a private watch room for someone special.</p>
+    </section>
+
+    <div class="search">
+      <input
+        type="search"
+        id="searchInput"
+        placeholder="Search movies..."
+        autocomplete="off"
+      />
+    </div>
+
+    <% if (movies.length === 0) { %>
+      <div class="empty-state">
+        <h2>No movies yet</h2>
+        <p>Add a movie to your library and it will appear here.</p>
+      </div>
+    <% } else { %>
+      <section class="movie-grid" id="movieGrid">
+        <% for (const movie of movies) { %>
+          <article class="movie-card" data-title="<%= movie.title.toLowerCase() %>">
+            <div class="thumb">
+              <img
+                src="/movie/<%= movie.id %>/thumbnail"
+                alt="<%= movie.title %>"
+                loading="lazy"
+                onerror="this.replaceWith(Object.assign(document.createElement('div'), { className: 'thumb-fallback', textContent: '<%= movie.title %>' }))"
+              />
+            </div>
+            <div class="card-body">
+              <div class="card-title"><%= movie.title %></div>
+              <div class="card-meta"><%= movie.year %> · <%= movie.duration %></div>
+              <div class="card-action">
+                <form method="post" action="/rooms">
+                  <input type="hidden" name="movieId" value="<%= movie.id %>" />
+                  <button type="submit">Create Room →</button>
+                </form>
+              </div>
+            </div>
+          </article>
+        <% } %>
+      </section>
+    <% } %>
+  </div>
+
+  <script>
+    const searchInput = document.getElementById('searchInput');
+    const movieGrid = document.getElementById('movieGrid');
+
+    searchInput.addEventListener('input', () => {
+      const query = searchInput.value.trim().toLowerCase();
+      for (const card of movieGrid.children) {
+        card.hidden = query !== '' && !card.dataset.title.includes(query);
+      }
+    });
+  </script>
 </body>
 </html>

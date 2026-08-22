@@ -96,6 +96,75 @@ EJS templates live in `src/views/`:
 The UI is intentionally simple: no frontend framework, just a small amount of
 vanilla JavaScript for the copy-link button.
 
+## Current Implementation — Step 3
+
+Step 3 adds a movie metadata catalog and a modern dark UI. Room mechanics,
+the in-memory room store, and the anonymous session system are unchanged.
+
+### Movie catalog (`data/movies.json`)
+
+Movie metadata lives in `data/movies.json` and is the single source of truth
+for the library. Actual video files and thumbnails stay inside `uploads/`.
+
+```json
+[
+  {
+    "id": "interstellar",
+    "title": "Interstellar",
+    "year": 2014,
+    "duration": "2h 49m",
+    "thumbnail": "interstellar.jpg",
+    "filename": "interstellar.mp4"
+  }
+]
+```
+
+- `id` — human-friendly slug used in every URL (`/movie/:id`,
+  `/movie/:id/thumbnail`) and in room creation (`POST /rooms`).
+- `filename` — the MP4 inside `uploads/`.
+- `thumbnail` — an image file inside `uploads/`.
+
+`MovieCatalogService` (in `src/services/movie-catalog.service.ts`) reads and
+validates the file with Zod. Duplicate ids or filenames are rejected, so a
+slug always maps to exactly one file. The service is loaded once at boot in
+`buildApp()` and shared by the movie and room routes. A dedicated service
+keeps JSON/file-reading logic out of the EJS routes.
+
+### Thumbnail route
+
+`GET /movie/:id/thumbnail` validates the slug against the catalog first, then
+resolves the thumbnail **inside `uploads/`** using the movie's own metadata —
+no arbitrary filesystem paths are exposed. Missing thumbnails return 404 and
+the UI falls back to a text placeholder on the card.
+
+### Home page
+
+`GET /` renders a modern dark grid of movie cards (thumbnail, title,
+year · duration, "Create Room →"). A client-side search box filters cards
+without a round-trip. No UUIDs are displayed; everything comes from catalog
+metadata.
+
+### Room page
+
+`GET /room/:roomId` is video-first. The movie streams through the existing
+`/movie/:id` endpoint (unchanged Range logic). Room details — title, host or
+viewer badge, room ID, shareable URL, and a Copy button — are hidden in an
+overlay by default:
+
+- Desktop: mouse movement over the video shows the overlay; it fades out
+  after 2.5 seconds of inactivity.
+- Mobile: tapping the video reveals the overlay, which hides automatically.
+
+The shareable URL remains `/room/:roomId` with no admin secret; the anonymous
+`pw_session` cookie continues to determine whether the visitor is the host
+(room creator) or a viewer.
+
+### Static assets
+
+Styles live in `src/public/css/app.css` (vanilla CSS, no framework) and are
+served by Fastify under `/static/`. The build step copies `views/` and
+`public/` into `dist/` so the production server can render and style pages.
+
 ## Planned Conceptual Direction
 
 These are future directions only. Nothing beyond Step 2 is implemented.
@@ -108,6 +177,9 @@ Step 2
 Watch room → server-rendered UI → in-memory room state
 
 Step 3
+Movie catalog → modern dark UI → thumbnail route
+
+Step 4
 WebSocket → synchronized playback
 
 Future

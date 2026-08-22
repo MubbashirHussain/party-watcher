@@ -3,44 +3,59 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Room · Party Watch</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
-    video { width: 100%; max-height: 70vh; background: #000; }
-    .badge { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.8rem; }
-    .badge.admin { background: #d4edda; color: #155724; }
-    .badge.viewer { background: #e2e3e5; color: #383d41; }
-    .room-url { display: flex; gap: 0.5rem; align-items: center; }
-    .room-url code { background: #f1f3f4; padding: 0.4rem 0.6rem; border-radius: 4px; flex: 1; overflow-wrap: anywhere; }
-    .movie-id { color: #666; font-size: 0.9rem; }
-    .copy-status { color: #155724; margin-left: 0.5rem; }
-  </style>
+  <title><%= movieTitle %> · Party Watch</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
 </head>
 <body>
-  <p><a href="/">← All movies</a></p>
-  <h1>Watch Room</h1>
+  <div class="room-page">
+    <div class="room-stage" id="roomStage">
+      <video id="player" controls autoplay src="/movie/<%= movieId %>"></video>
 
-  <% if (isAdmin) { %>
-    <span class="badge admin">You are the admin</span>
-  <% } else { %>
-    <span class="badge viewer">You are a viewer</span>
-  <% } %>
+      <div class="room-overlay" id="roomOverlay">
+        <div class="overlay-top">
+          <span class="movie-title"><%= movieTitle %></span>
+          <% if (isAdmin) { %>
+            <span class="badge">Host</span>
+          <% } else { %>
+            <span class="badge">Viewer</span>
+          <% } %>
+        </div>
+        <div class="overlay-meta"><%= movieYear %> · <%= movieDuration %></div>
+        <div class="room-info">Room: <code><%= roomId %></code></div>
+        <div class="share-row">
+          <code id="roomUrl"><%= roomUrl %></code>
+          <button type="button" id="copyButton">Copy</button>
+          <span class="copy-status" id="copyStatus" hidden>Copied!</span>
+        </div>
+      </div>
 
-  <p class="movie-id">Movie: <code><%= movieId %></code></p>
-
-  <video id="player" controls autoplay src="/movie/<%= movieId %>"></video>
-
-  <h2>Share this room</h2>
-  <div class="room-url">
-    <code id="roomUrl"><%= roomUrl %></code>
-    <button type="button" id="copyButton">Copy</button>
-    <span class="copy-status" id="copyStatus" hidden>Copied!</span>
+      <a class="room-back" href="/">← All movies</a>
+    </div>
   </div>
 
   <script>
-    const roomUrl = document.getElementById('roomUrl');
+    const stage = document.getElementById('roomStage');
     const copyButton = document.getElementById('copyButton');
     const copyStatus = document.getElementById('copyStatus');
+    const roomUrl = document.getElementById('roomUrl');
+
+    let hideTimer = null;
+
+    function showOverlay() {
+      stage.classList.add('overlay-visible');
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(hideOverlay, 2500);
+    }
+
+    function hideOverlay() {
+      stage.classList.remove('overlay-visible');
+    }
+
+    // Desktop: mouse movement over the room shows the overlay.
+    stage.addEventListener('mousemove', showOverlay);
+
+    // Mobile: tapping the video reveals the overlay.
+    stage.addEventListener('touchstart', showOverlay, { passive: true });
 
     copyButton.addEventListener('click', async () => {
       try {
@@ -48,10 +63,12 @@
         copyStatus.hidden = false;
         setTimeout(() => { copyStatus.hidden = true; }, 1500);
       } catch {
-        // Clipboard API unavailable (e.g. non-secure context); fall back to select + prompt.
+        // Clipboard API unavailable (e.g. non-secure context); fall back to select.
         roomUrl.focus();
         roomUrl.select();
         document.execCommand('copy');
+        copyStatus.hidden = false;
+        setTimeout(() => { copyStatus.hidden = true; }, 1500);
       }
     });
   </script>

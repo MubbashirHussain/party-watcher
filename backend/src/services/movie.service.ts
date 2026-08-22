@@ -1,7 +1,8 @@
 import { stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { resolveMoviePath } from '../utils/file.utils.js';
+import { resolveFilePath } from '../utils/file.utils.js';
 import type { Movie } from '../types/movie.types.js';
+import type { MovieCatalogService } from './movie-catalog.service.js';
 
 export class MovieNotFoundError extends Error {
   constructor() {
@@ -18,15 +19,12 @@ export class MoviePathError extends Error {
 }
 
 export async function getMovie(
+  catalog: MovieCatalogService,
   uploadDir: string,
-  movieId: string,
+  slug: string,
 ): Promise<Movie> {
-  let filePath: string;
-  try {
-    filePath = resolveMoviePath(uploadDir, movieId);
-  } catch {
-    throw new MoviePathError();
-  }
+  const metadata = catalog.getBySlug(slug);
+  const filePath = resolveFilePath(uploadDir, metadata.filename);
 
   // Guard against a symlink inside uploads pointing outside the directory.
   const resolved = resolve(filePath);
@@ -40,7 +38,12 @@ export async function getMovie(
     if (!stats.isFile()) {
       throw new MovieNotFoundError();
     }
-    return { id: movieId, filePath, size: Number(stats.size) };
+    return {
+      id: metadata.id,
+      filename: metadata.filename,
+      filePath,
+      size: Number(stats.size),
+    };
   } catch (err) {
     if (err instanceof MovieNotFoundError || err instanceof MoviePathError) {
       throw err;

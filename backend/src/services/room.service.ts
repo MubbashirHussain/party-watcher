@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { readdir } from 'node:fs/promises';
-import { join } from 'node:path';
 import type { Room } from '../types/room.types.js';
 
 export class RoomNotFoundError extends Error {
@@ -37,16 +35,4 @@ export class RoomService {
     }
     return room;
   }
-}
-
-/** Lists the movie UUIDs available in the uploads directory. */
-export async function listMovies(uploadDir: string): Promise<string[]> {
-  const entries = await readdir(uploadDir);
-  const ids: string[] = [];
-  for (const entry of entries) {
-    if (entry.endsWith('.mp4')) {
-      ids.push(entry.slice(0, -'.mp4'.length));
-    }
-  }
-  return ids.sort();
 }

@@ -1,10 +1,17 @@
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import formbody from '@fastify/formbody';
+import fastifyStatic from '@fastify/static';
 import { loadEnv } from './config/env.js';
+import { MovieCatalogService } from './services/movie-catalog.service.js';
 import { movieRoutes } from './routes/movie.route.js';
 import { roomRoutes } from './routes/room.route.js';
+
+// Directory containing this module: src/ in dev, dist/ after build. The
+// public/ folder sits next to it in both cases.
+const moduleDir = dirname(fileURLToPath(import.meta.url));
 
 const isMain =
   process.argv[1] !== undefined &&
@@ -18,15 +25,23 @@ export async function buildApp() {
     },
   });
 
+  const catalog = new MovieCatalogService();
+  await catalog.load(env.MOVIES_FILE);
+
   app.setErrorHandler((error, request, reply) => {
     request.log.error(error, 'Request error');
     reply.status(500).send({ error: 'Internal server error' });
   });
 
+  await app.register(fastifyStatic, {
+    root: join(moduleDir, 'public'),
+    prefix: '/static/',
+  });
+
   await app.register(cookie);
   await app.register(formbody);
-  await app.register(roomRoutes);
-  app.register(movieRoutes);
+  await app.register(roomRoutes, { catalog });
+  app.register(movieRoutes, { catalog });
 
   return { app, env };
 }

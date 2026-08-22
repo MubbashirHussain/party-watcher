@@ -1,0 +1,50 @@
+[
+  {
+    "id": "interstellar",
+    "title": "Interstellar",
+    "year": 2014,
+    "duration": "2h 49m",
+    "thumbnail": "interstellar.jpg",
+    "filename": "interstellar.mp4"
+  },
+  {
+    "id": "inception",
+    "title": "Inception",
+    "year": 2010,
+    "duration": "2h 28m",
+    "thumbnail": "inception.jpg",
+    "filename": "inception.mp4"
+  },
+  {
+    "id": "the-dark-knight",
+    "title": "The Dark Knight",
+    "year": 2008,
+    "duration": "2h 32m",
+    "thumbnail": "the-dark-knight.jpg",
+    "filename": "the-dark-knight.mp4"
+  },
+  {
+    "id": "dune-part-two",
+    "title": "Dune: Part Two",
+    "year": 2024,
+    "duration": "2h 46m",
+    "thumbnail": "dune-part-two.jpg",
+    "filename": "dune-part-two.mp4"
+  },
+  {
+    "id": "everything-everywhere",
+    "title": "Everything Everywhere All at Once",
+    "year": 2022,
+    "duration": "2h 19m",
+    "thumbnail": "everything-everywhere.jpg",
+    "filename": "everything-everywhere.mp4"
+  },
+  {
+    "id": "the-grand-budapest-hotel",
+    "title": "The Grand Budapest Hotel",
+    "year": 2014,
+    "duration": "1h 39m",
+    "thumbnail": "the-grand-budapest-hotel.jpg",
+    "filename": "the-grand-budapest-hotel.mp4"
+  }
+]
