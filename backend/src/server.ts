@@ -7,6 +7,7 @@ import fastifyStatic from '@fastify/static';
 import { loadEnv } from './config/env.js';
 import { MovieCatalogService } from './services/movie-catalog.service.js';
 import { RoomService } from './services/room.service.js';
+import { RoomSyncService } from './services/room-sync.service.js';
 import { movieRoutes } from './routes/movie.route.js';
 import { roomRoutes } from './routes/room.route.js';
 
@@ -31,6 +32,16 @@ export async function buildApp() {
 
   const rooms = new RoomService(env.ROOMS_FILE);
   await rooms.init();
+
+  // WebSocket hub for room playback sync. It attaches its upgrade handler to
+  // the HTTP server in onListen, once the server exists.
+  let sync: RoomSyncService | null = null;
+  app.addHook('onListen', () => {
+    sync = new RoomSyncService(app.server, rooms);
+  });
+  app.addHook('onClose', async () => {
+    await sync?.close();
+  });
 
   app.setErrorHandler((error, request, reply) => {
     request.log.error(error, 'Request error');

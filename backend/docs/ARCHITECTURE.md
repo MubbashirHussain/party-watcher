@@ -216,9 +216,63 @@ Styles live in `src/public/css/app.css` (vanilla CSS, no framework) and are
 served by Fastify under `/static/`. The build step copies `views/` and
 `public/` into `dist/` so the production server can render and style pages.
 
+## Current Implementation — Step 4
+
+Step 4 adds **real-time playback synchronization over WebSocket (`ws`)**.
+The host is the source of truth: the room page opens a WebSocket, the server
+derives host status from `roomId → userId → isHost` (never a client-sent
+`isAdmin`), and only the host's playback commands are broadcast. Viewers
+follow the host's timeline, play/pause state, and quality.
+
+```
+Host (browser)
+   │  WebSocket /ws?roomId&userId
+   ▼
+RoomSyncService (ws server attached to the HTTP server in onListen)
+   │  roomId → userId → isHost (userId === room.adminId)
+   ▼
+All viewers (broadcast) + data/current.json (persist)
+```
+
+### WebSocket hub (`RoomSyncService`)
+
+- Endpoint `/ws`; the client sends `roomId` and `userId` as query params.
+- The `userId` must match the `pw_session` cookie, and private rooms require
+  the `pw_room_<id>` access cookie (same gate as the HTTP routes).
+- Host messages (`play`, `pause`, `seek`, `quality`, `drift`) are broadcast to
+  every other connection in the room and persisted to the room's `playback`
+  state via `rooms.updatePlayback`.
+- Viewer messages are dropped server-side — a viewer cannot drive playback by
+  crafting WebSocket frames.
+- On connect, the server sends a `sync` message with the current
+  `{ paused, timeline, quality }` so the new client immediately matches the
+  host. On reconnect with the same `userId`, the stale socket is closed so no
+  duplicate sessions accumulate.
+
+### Browser (`room.ejs`)
+
+- The server injects `IS_ADMIN`, `ROOM_ID`, `USER_ID`; the page opens `/ws`
+  and reconnects automatically on disconnect.
+- Host: play/pause/seek/quality actions send messages; the server relays them
+  to all tabs (including the host's own).
+- Viewer: playback controls are hidden/disabled; remote messages apply the
+  host's state. Volume and playback speed remain personal and are never
+  broadcast.
+- Drift: the host sends a lightweight `drift` timeline every 10 s while
+  playing; viewers correct only when they drift > 2 s. There is no
+  timeupdate-level message spam.
+
+### Verification
+
+- Host plays → viewer plays; host pauses → viewer pauses; host seeks → viewer
+  seeks; host changes quality → viewer sees it; a new viewer joining receives
+  the current playback state immediately.
+- Covered by `tests/room/room-sync.test.ts` (integration: broadcast, viewer
+  rejection, initial state, cookie rejection, reconnect).
+
 ## Planned Conceptual Direction
 
-These are future directions only. Nothing beyond Step 3 is implemented.
+These are future directions only. Steps 1–4 are implemented.
 
 ```
 Step 1
@@ -231,10 +285,11 @@ Step 3
 Movie catalog → dark UI → file-backed rooms with named users
 
 Step 4
-WebSocket → synchronized playback
+WebSocket → synchronized playback (host = source of truth)
 
 Future
-Admin controls → play/pause/seek/quality
+Admin transfer, chat, voice/video calls, HLS, complex drift correction,
+multi-host support
 ```
 
 The server will eventually become the source of truth for:

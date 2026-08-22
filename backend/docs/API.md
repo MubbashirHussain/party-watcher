@@ -3,8 +3,8 @@
 This document describes the **full request flow for every API route** and how the
 **frontend is rendered using EJS server-side rendering (SSR)**.
 
-**Stack:** Node.js + Fastify · EJS (SSR) · JSON-file persistence · vanilla JS/CSS.
-There is **no database, no authentication, no WebSockets** (playback sync is planned for a future step).
+**Stack:** Node.js + Fastify · EJS (SSR) · JSON-file persistence · vanilla JS/CSS · `ws` (WebSocket playback sync).
+There is **no database, no authentication** (playback sync is implemented via WebSocket).
 
 ---
 
@@ -15,6 +15,7 @@ Browser ──HTTP──▶ Fastify Server (src/server.ts)
                      │  buildApp() constructs services & injects them into route plugins
                      ├─ MovieCatalogService  (loads data/movies.json once at boot)
                      ├─ RoomService          (file-backed CRUD on data/current.json)
+                     ├─ RoomSyncService      (WebSocket hub on /ws — playback sync)
                      ├─ roomRoutes           (home, room create/join/view + EJS view engine)
                      ├─ movieRoutes          (MP4 streaming + thumbnail streaming)
                      └─ @fastify/static      (serves /static/css/app.css)
@@ -28,7 +29,9 @@ Startup order inside `buildApp()`:
 4. Register a global error handler → `500 { error: 'Internal server error' }`.
 5. Register plugins: `@fastify/static`, `@fastify/cookie`, `@fastify/formbody`,
    `roomRoutes`, `movieRoutes`.
-6. If run directly: `app.listen({ port, host: '0.0.0.0' })`.
+6. `onListen`: `new RoomSyncService(app.server, rooms)` attaches a `ws` upgrade
+   handler to the HTTP server (the `ws` endpoint is `/ws`). Closed on `onClose`.
+7. If run directly: `app.listen({ port, host: '0.0.0.0' })`.
 
 Dependency injection is done via Fastify plugin `opts`, keeping services testable and decoupled from HTTP.
 
@@ -48,6 +51,7 @@ Dependency injection is done via Fastify plugin `opts`, keeping services testabl
 | GET    | `/movie/:id`           | stream MP4 (HTTP Range support) | 200 / 206 / 416       |
 | GET    | `/movie/:id/thumbnail` | stream JPEG thumbnail           | 200 / 404             |
 | GET    | `/static/*`            | static assets (CSS)             | CSS                   |
+| WS     | `/ws?roomId=&userId=`  | playback sync (host broadcasts) | WebSocket             |
 
 ---
 
@@ -204,6 +208,40 @@ Used by the `<img src="/movie/<id>/thumbnail">` in the home grid.
 
 ---
 
+## 2.7 `WS /ws` — Real-time playback sync
+
+The room page opens a WebSocket when it loads. The connection URL is
+`ws(s)://<host>/ws?roomId=<uuid>&userId=<uuid>`. The server validates the
+`userId` against the `pw_session` cookie and derives host status from
+`userId === room.adminId` — a client can never declare itself admin.
+
+**Client → server (host only; viewer messages are ignored):**
+
+| Message | Payload | Effect |
+|---------|---------|--------|
+| `play` | `{ type, timeline }` | Broadcast `play`, persist `{ paused: false, timeline }` |
+| `pause` | `{ type, timeline }` | Broadcast `pause`, persist `{ paused: true, timeline }` |
+| `seek` | `{ type, timeline }` | Broadcast `seek`, persist `{ timeline }` |
+| `quality` | `{ type, quality }` | Broadcast `quality`, persist `{ quality }` |
+| `drift` | `{ type, timeline }` | Broadcast `drift`, persist `{ timeline }` |
+
+**Server → client:**
+
+| Message | Payload | Purpose |
+|---------|---------|---------|
+| `sync` | `{ type, playback }` | Current room playback state, sent on connect |
+| `play` / `pause` / `seek` / `quality` / `drift` | host event | Applied by every connected client |
+
+The browser applies remote messages: viewers follow the host's timeline,
+play/pause state, and quality. Viewer playback controls are hidden/disabled
+and any `play`/`pause`/`seek`/`quality` message a viewer sends is dropped by
+the server. The host broadcasts its own events to every client (including
+itself) so all tabs converge. A lightweight `drift` message is sent by the
+host every 10 s while playing; viewers nudge their timeline only when they
+drift > 2 s, avoiding timeupdate-level message spam.
+
+---
+
 ## 3. Services
 
 ### MovieCatalogService (`src/services/movie-catalog.service.ts`)
@@ -234,11 +272,34 @@ Used by the `<img src="/movie/<id>/thumbnail">` in the home grid.
 - API: `init()`, `createRoom(movieId, adminId, options?)`,
   `getRoom(roomId)`, `isUserInRoom(roomId, userId)`,
   `isPasswordCorrect(roomId, password)`, `ensureAccessToken(roomId)`,
-  `addUser(roomId, userId, name)`.
+  `addUser(roomId, userId, name)`, `updatePlayback(roomId, playback)`.
 - `createRoom` accepts `{ visibility?: 'public' | 'private', password?: string }`.
   Private rooms hash the password with bcrypt (cost 12) and generate an
   opaque `accessToken`; the plaintext is never stored.
+- `updatePlayback` replaces the room's `playback` state and persists it; it is
+  called by `RoomSyncService` when the host changes play/pause/seek/quality.
 - Errors: `RoomNotFoundError`, `RoomStoreError`, `RoomPasswordRequiredError`.
+
+### RoomSyncService (`src/services/room-sync.service.ts`)
+
+- WebSocket hub attached to the HTTP server in `onListen`; endpoint `/ws`.
+- Connections identify with `?roomId=<uuid>&userId=<uuid>`; the server derives
+  host status from `userId === room.adminId` and **never trusts a client-sent
+  `isAdmin` value**.
+- The `userId` query param must match the `pw_session` cookie; private rooms
+  additionally require the `pw_room_<id>` access cookie (same gate as the HTTP
+  routes).
+- Client → server messages: `play`, `pause`, `seek`, `quality`, `drift`.
+  Only the **host's** messages are broadcast to the room; viewer messages are
+  dropped server-side.
+- Server → client messages:
+  - `sync` — the room's current `{ paused, timeline, quality }` (sent on connect).
+  - `play` / `pause` / `seek` / `quality` — forwarded host events.
+  - `drift` — the host's periodic lightweight timeline while playing.
+- Host events are persisted via `rooms.updatePlayback`, so a newly connecting
+  client is sent the current state immediately.
+- On reconnect with the same `userId`, any stale socket from that user is
+  closed so duplicates never accumulate.
 
 ---
 
@@ -276,8 +337,9 @@ Room            {
 RoomStore       Record<string, Room>   // shape of data/current.json
 ```
 
-`data/current.json` starts empty (`{}`). Playback state is **stored but never mutated by any
-route** — synchronization is planned for a future WebSocket step.
+`data/current.json` starts empty (`{}`). Playback state is written by
+`RoomSyncService` whenever the host plays, pauses, seeks, or changes quality,
+and is sent to new clients on connect via the `sync` message.
 
 Example private room:
 
@@ -339,7 +401,7 @@ app.register(view, {
 | Template | Purpose | Data passed |
 |----------|---------|-------------|
 | `home.ejs` | Searchable movie grid; each card has a "Create Room →" form with Public/Private + password field | `{ movies }` |
-| `room.ejs` | Watch page: `<video>`, overlay, name modal, password lock screen, share URL + Copy button | `{ roomId, movieId, movieTitle, movieYear, movieDuration, roomUrl, isAdmin, userName, roomUsers, roomVisibility, needsPassword, passwordError }` |
+| `room.ejs` | Watch page: `<video>`, overlay, name modal, password lock screen, share URL + Copy button, WebSocket playback sync | `{ roomId, userId, movieId, movieTitle, movieYear, movieDuration, roomUrl, isAdmin, userName, roomUsers, roomVisibility, needsPassword, passwordError }` |
 | `not-found.ejs` | 404 page | `{ message }` |
 | `error.ejs` | Generic error page | `{ message }` |
 
@@ -376,6 +438,17 @@ app.register(view, {
     `<form method="post" action="/room/<%= roomId %>/join">` with a `name` input
     (maxlength 40, required, autofocus).
 - Overlay show/hide (3 s auto-hide) and copy handler are inline vanilla JS.
+- **WebSocket sync** (host = source of truth):
+  - The server injects `IS_ADMIN`, `ROOM_ID`, `USER_ID` into the page script.
+  - `connectSync()` opens `/ws?roomId=...&userId=...`, reconnecting
+    automatically on close.
+  - Host actions (play, pause, seek, quality, drift) send a message; the
+    server relays them to the room.
+  - Remote messages apply the host's timeline / play-pause state / quality to
+    every tab; viewer tabs keep their own volume/speed (personal preferences,
+    never broadcast).
+  - The host's `play`/`pause`/`seek`/`quality`/`drift` controls are hidden or
+    disabled for viewers.
 
 ### Static assets
 

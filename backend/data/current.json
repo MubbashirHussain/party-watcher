@@ -360,6 +360,8 @@
     "movieId": "interstellar",
     "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
     "visibility": "private",
+    "passwordHash": "$2b$12$3kfFIP2bV9Xcopv.vL/f6ujWZFYOWuYi5jeBsfg.2P/V87fWtfx/W",
+    "accessToken": "d106788b-c2ab-4d5f-b2a7-508ba080aed0",
     "users": [
       {
         "id": "ece51819-98df-48b6-abee-2efcac04be24",
@@ -374,8 +376,29 @@
       "paused": false,
       "timeline": 0,
       "quality": "720p"
-    },
-    "passwordHash": "$2b$12$3kfFIP2bV9Xcopv.vL/f6ujWZFYOWuYi5jeBsfg.2P/V87fWtfx/W",
-    "accessToken": "d106788b-c2ab-4d5f-b2a7-508ba080aed0"
+    }
+  },
+  "a6117a7f-2df6-4fd9-b53b-c17a31c654b7": {
+    "id": "a6117a7f-2df6-4fd9-b53b-c17a31c654b7",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "private",
+    "passwordHash": "$2b$12$hOEy3Tw9cCeh6vlUNmVUdeB8F/byUVZoZJUXSS3OgKy1JomJyym7q",
+    "accessToken": "ee02b459-7597-4bc1-8c44-5f61ca4080ae",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      },
+      {
+        "id": "b60a64a0-cd36-4ad7-82f3-196784b61d37",
+        "name": "mom"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 30.157371,
+      "quality": "720p"
+    }
   }
 }

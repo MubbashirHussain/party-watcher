@@ -98,4 +98,29 @@ describe('RoomService', () => {
       service.createRoom('interstellar', 'user-1', { visibility: 'private' }),
     ).rejects.toThrow('Private rooms require a password');
   });
+
+  it('updates playback state and persists it to disk', async () => {
+    const room = await service.createRoom('interstellar', 'user-1');
+
+    const updated = await service.updatePlayback(room.id, {
+      paused: true,
+      timeline: 120.5,
+      quality: '1080p',
+    });
+
+    expect(updated.playback).toEqual({
+      paused: true,
+      timeline: 120.5,
+      quality: '1080p',
+    });
+
+    const persisted = JSON.parse(
+      await readFile(join(dir, 'current.json'), 'utf8'),
+    );
+    expect(persisted[room.id].playback).toEqual({
+      paused: true,
+      timeline: 120.5,
+      quality: '1080p',
+    });
+  });
 });

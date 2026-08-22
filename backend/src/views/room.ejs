@@ -196,15 +196,15 @@
 
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-3 sm:space-x-4">
-                    <button id="playPauseBtn" class="p-2 rounded-xl bg-white/10 hover:bg-accent text-white transition-all shadow-md flex items-center justify-center cursor-pointer">
+                    <button id="playPauseBtn" class="p-2 rounded-xl bg-white/10 hover:bg-accent text-white transition-all shadow-md flex items-center justify-center cursor-pointer <%= !isAdmin ? 'opacity-40 pointer-events-none' : '' %>">
                         <svg id="playIcon" class="w-6 h-6 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                         <svg id="pauseIcon" class="w-6 h-6 hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                     </button>
 
-                    <button onclick="skipTime(-10)" class="hidden sm:flex p-2 text-zinc-300 hover:text-white transition-colors" title="Rewind 10s">
+                    <button onclick="skipTime(-10)" class="hidden sm:flex p-2 text-zinc-300 hover:text-white transition-colors <%= !isAdmin ? 'opacity-40 pointer-events-none' : '' %>" title="Rewind 10s">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z"/></svg>
                     </button>
-                    <button onclick="skipTime(10)" class="hidden sm:flex p-2 text-zinc-300 hover:text-white transition-colors" title="Forward 10s">
+                    <button onclick="skipTime(10)" class="hidden sm:flex p-2 text-zinc-300 hover:text-white transition-colors <%= !isAdmin ? 'opacity-40 pointer-events-none' : '' %>" title="Forward 10s">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.934 12.8a1 1 0 000-1.6l-5.334-4A1 1 0 005 8v8a1 1 0 001.6.8l5.334-4zM19.934 12.8a1 1 0 000-1.6l-5.334-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.334-4z"/></svg>
                     </button>
 
@@ -221,7 +221,7 @@
                 </div>
 
                 <div class="flex items-center space-x-2 sm:space-x-3">
-                    <div class="relative">
+                    <div class="relative <%= !isAdmin ? 'hidden' : '' %>">
                         <button id="speedBtn" onclick="toggleSpeedMenu()" class="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold text-zinc-200 transition-colors">1x</button>
                         <div id="speedMenu" class="hidden absolute bottom-full right-0 mb-2 w-28 bg-cardBg border border-zinc-800 rounded-xl shadow-2xl overflow-hidden py-1 z-30">
                             <button onclick="setSpeed(0.5)" class="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">0.5x</button>
@@ -232,7 +232,7 @@
                         </div>
                     </div>
 
-                    <div class="relative">
+                    <div class="relative <%= !isAdmin ? 'hidden' : '' %>">
                         <button onclick="toggleQualityMenu()" class="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold text-zinc-200 transition-colors flex items-center space-x-1">
                             <span id="currentQuality">1080p</span>
                         </button>
@@ -292,7 +292,17 @@
         const centerIcon = document.getElementById('centerIcon');
         const videoMockOverlay = document.getElementById('videoMockOverlay');
 
+        // Sync identity injected by the server. The WebSocket identifies this
+        // client with roomId + userId; the server derives host status from
+        // userId === room.adminId and never trusts a client-sent isAdmin.
+        const IS_ADMIN = <%= isAdmin %>;
+        const ROOM_ID = "<%= roomId %>";
+        const USER_ID = "<%= userId %>";
+
         let hideTimeout = null;
+        let pendingSeek = null;
+        let ws = null;
+        let wsConnected = false;
 
         video.addEventListener('error', () => {
             video.style.display = 'none';
@@ -307,20 +317,31 @@
         }
 
         function togglePlay() {
+            // Viewers never control playback; only the host's actions are sent.
+            if (!IS_ADMIN) return;
             if (video.paused) {
                 video.play().catch(() => {
                     videoMockOverlay.classList.remove('hidden');
                 });
-                playIcon.classList.add('hidden');
-                pauseIcon.classList.remove('hidden');
-                centerIcon.textContent = '▶';
+                sendPlaybackEvent({ type: 'play', timeline: video.currentTime });
             } else {
                 video.pause();
+                sendPlaybackEvent({ type: 'pause', timeline: video.currentTime });
+            }
+            updatePlayButtons();
+            triggerCenterAnimation();
+        }
+
+        function updatePlayButtons() {
+            if (video.paused) {
                 playIcon.classList.remove('hidden');
                 pauseIcon.classList.add('hidden');
                 centerIcon.textContent = '⏸';
+            } else {
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+                centerIcon.textContent = '▶';
             }
-            triggerCenterAnimation();
         }
 
         playPauseBtn.addEventListener('click', togglePlay);
@@ -349,16 +370,20 @@
         });
 
         timelineBar.addEventListener('click', (e) => {
+            if (!IS_ADMIN) return;
             const rect = timelineBar.getBoundingClientRect();
             const pos = (e.clientX - rect.left) / rect.width;
             if (video.duration) {
                 video.currentTime = pos * video.duration;
+                sendPlaybackEvent({ type: 'seek', timeline: video.currentTime });
             }
         });
 
         function skipTime(sec) {
+            if (!IS_ADMIN) return;
             if (video.duration) {
                 video.currentTime = Math.min(Math.max(video.currentTime + sec, 0), video.duration);
+                sendPlaybackEvent({ type: 'seek', timeline: video.currentTime });
             }
         }
 
@@ -381,11 +406,14 @@
         });
 
         function toggleSpeedMenu() {
+            // Playback speed must match the host; viewers cannot change it.
+            if (!IS_ADMIN) return;
             document.getElementById('speedMenu').classList.toggle('hidden');
             document.getElementById('qualityMenu').classList.add('hidden');
         }
 
         function setSpeed(rate) {
+            if (!IS_ADMIN) return;
             video.playbackRate = rate;
             document.getElementById('speedBtn').textContent = `${rate}x`;
             document.getElementById('speedMenu').classList.add('hidden');
@@ -399,7 +427,13 @@
         function setQuality(qual) {
             document.getElementById('currentQuality').textContent = qual;
             document.getElementById('qualityMenu').classList.add('hidden');
+            if (IS_ADMIN) {
+                sendPlaybackEvent({ type: 'quality', quality: qual });
+            }
         }
+
+        // Playback speed is a personal preference — viewers may still adjust
+        // their own playback rate, and it is never broadcast.
 
         function showControls() {
             topOverlay.style.opacity = '1';
@@ -437,6 +471,147 @@
             note.classList.remove('hidden');
             setTimeout(() => { note.classList.add('hidden'); }, 2000);
         }
+
+        // ---------------------------------------------------------------
+        // WebSocket playback synchronization
+        // ---------------------------------------------------------------
+
+        function connectSync() {
+            const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+            ws = new WebSocket(`${scheme}://${location.host}/ws?roomId=${encodeURIComponent(ROOM_ID)}&userId=${encodeURIComponent(USER_ID)}`);
+
+            ws.onopen = () => {
+                wsConnected = true;
+            };
+
+            ws.onmessage = (event) => {
+                let message;
+                try {
+                    message = JSON.parse(event.data);
+                } catch {
+                    return;
+                }
+                handleSyncMessage(message);
+            };
+
+            ws.onclose = () => {
+                wsConnected = false;
+                // Reconnect automatically (e.g. after a temporary disconnect).
+                setTimeout(connectSync, 2000);
+            };
+
+            ws.onerror = () => {
+                ws.close();
+            };
+        }
+
+        function sendPlaybackEvent(event) {
+            if (wsConnected && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(event));
+            }
+        }
+
+        function handleSyncMessage(message) {
+            switch (message.type) {
+                case 'sync':
+                    applyPlaybackState(message.playback);
+                    break;
+                case 'play':
+                    applyRemotePlay(message.timeline);
+                    break;
+                case 'pause':
+                    applyRemotePause(message.timeline);
+                    break;
+                case 'seek':
+                    applyRemoteSeek(message.timeline);
+                    break;
+                case 'quality':
+                    document.getElementById('currentQuality').textContent = message.quality;
+                    break;
+                case 'drift':
+                    applyDrift(message.timeline);
+                    break;
+            }
+        }
+
+        // The host broadcasts its own events too (the server relays them back),
+        // so every tab — including the host's — applies the same state. Viewer
+        // tabs apply remote commands and ignore their own (disabled) controls.
+        function applyRemotePlay(timeline) {
+            pendingSeek = timeline;
+            if (!video.paused) {
+                video.currentTime = timeline;
+                pendingSeek = null;
+            }
+            video.play().catch(() => {
+                videoMockOverlay.classList.remove('hidden');
+            });
+            updatePlayButtons();
+            triggerCenterAnimation();
+        }
+
+        function applyRemotePause(timeline) {
+            pendingSeek = timeline;
+            video.pause();
+            if (video.currentTime !== timeline) {
+                video.currentTime = timeline;
+            }
+            pendingSeek = null;
+            updatePlayButtons();
+            triggerCenterAnimation();
+        }
+
+        function applyRemoteSeek(timeline) {
+            video.currentTime = timeline;
+            pendingSeek = null;
+        }
+
+        function applyPlaybackState(playback) {
+            const targetPaused = playback.paused;
+            if (playback.quality) {
+                document.getElementById('currentQuality').textContent = playback.quality;
+            }
+            if (playback.timeline > 0 && video.readyState >= 1) {
+                video.currentTime = playback.timeline;
+            }
+            if (targetPaused) {
+                video.pause();
+            } else {
+                video.play().catch(() => {
+                    videoMockOverlay.classList.remove('hidden');
+                });
+            }
+            updatePlayButtons();
+        }
+
+        // When a seek/play arrives before the video can seek, retry once the
+        // metadata is loaded so the timeline is applied.
+        video.addEventListener('loadedmetadata', () => {
+            if (pendingSeek !== null) {
+                video.currentTime = pendingSeek;
+                pendingSeek = null;
+            }
+        });
+
+        // Lightweight drift correction. The host broadcasts its current
+        // timeline every few seconds while playing; viewers nudge themselves
+        // back only when they drift more than 2 seconds. No timeupdate-level
+        // message spam.
+        function applyDrift(timeline) {
+            if (video.paused || !video.duration) return;
+            const diff = timeline - video.currentTime;
+            if (Math.abs(diff) > 2) {
+                video.currentTime += Math.sign(diff) * Math.min(Math.abs(diff), 5);
+            }
+        }
+
+        setInterval(() => {
+            if (IS_ADMIN && wsConnected && !video.paused) {
+                sendPlaybackEvent({ type: 'drift', timeline: video.currentTime });
+            }
+        }, 10000);
+
+        connectSync();
     </script>
     <% } %>
 </body>

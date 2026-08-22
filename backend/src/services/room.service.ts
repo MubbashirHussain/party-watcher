@@ -184,6 +184,21 @@ export class RoomService {
     return room;
   }
 
+  /**
+   * Replaces the room's playback state and persists it. Returns the room.
+   * Playback is stored server-side so a newly connecting viewer can be sent
+   * the host's current timeline / play-pause state / quality immediately.
+   */
+  async updatePlayback(
+    roomId: string,
+    playback: Room['playback'],
+  ): Promise<Room> {
+    const room = this.getRoom(roomId);
+    room.playback = playback;
+    await this.persist();
+    return room;
+  }
+
   /** Rewrites the store file atomically. */
   private async persist(): Promise<void> {
     const snapshot = JSON.stringify(this.rooms, null, 2);

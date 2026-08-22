@@ -55,6 +55,7 @@ const passwordBodySchema = z.object({
 
 interface RoomViewData {
   roomId: string;
+  userId: string;
   movieId: string;
   movieTitle: string;
   movieYear: string | number;
@@ -98,6 +99,7 @@ async function buildRoomViewData(
 
   return {
     roomId: room.id,
+    userId,
     movieId: room.movieId,
     movieTitle: metadata.title,
     movieYear: metadata.year,
