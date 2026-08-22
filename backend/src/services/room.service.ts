@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { z } from 'zod';
-import type { Room, RoomStore } from '../types/room.types.js';
+import { hashPassword, verifyPassword } from '../utils/password.utils.js';
+import type { Room, RoomStore, RoomVisibility } from '../types/room.types.js';
 
 export class RoomNotFoundError extends Error {
   constructor() {
@@ -15,6 +16,13 @@ export class RoomStoreError extends Error {
   constructor() {
     super('Room store could not be read');
     this.name = 'RoomStoreError';
+  }
+}
+
+export class RoomPasswordRequiredError extends Error {
+  constructor() {
+    super('Private rooms require a password');
+    this.name = 'RoomPasswordRequiredError';
   }
 }
 
@@ -33,11 +41,24 @@ const roomSchema = z.object({
   id: z.string().min(1),
   movieId: z.string().min(1),
   adminId: z.string().min(1),
+  // Rooms created before visibility existed default to public so existing
+  // rooms keep working. The default is materialized in memory and written
+  // back on the next persist().
+  visibility: z.enum(['public', 'private']).default('public'),
+  passwordHash: z.string().min(1).optional(),
+  accessToken: z.string().min(1).optional(),
   users: z.array(roomUserSchema),
   playback: playbackSchema,
 });
 
 const roomStoreSchema = z.record(z.string(), roomSchema);
+
+/** Options controlling the created room's visibility. */
+export interface CreateRoomOptions {
+  visibility?: RoomVisibility;
+  /** Plaintext password; required when visibility is 'private'. */
+  password?: string;
+}
 
 /**
  * File-backed room store persisted to `data/current.json`.
@@ -74,15 +95,33 @@ export class RoomService {
     this.rooms = result.data;
   }
 
-  /** Creates a room and persists it. Returns the created room. */
-  async createRoom(movieId: string, adminId: string): Promise<Room> {
+  /**
+   * Creates a room and persists it. Returns the created room.
+   * Private rooms are hashed with bcrypt and given a unique access token
+   * (never stored as plaintext).
+   */
+  async createRoom(
+    movieId: string,
+    adminId: string,
+    options: CreateRoomOptions = {},
+  ): Promise<Room> {
+    const visibility = options.visibility ?? 'public';
+    if (visibility === 'private' && !options.password) {
+      throw new RoomPasswordRequiredError();
+    }
+
     const room: Room = {
       id: randomUUID(),
       movieId,
       adminId,
+      visibility,
       users: [{ id: adminId, name: 'Host' }],
       playback: { paused: false, timeline: 0, quality: '720p' },
     };
+    if (visibility === 'private') {
+      room.passwordHash = await hashPassword(options.password!);
+      room.accessToken = randomUUID();
+    }
     this.rooms[room.id] = room;
     await this.persist();
     return room;
@@ -101,6 +140,31 @@ export class RoomService {
   isUserInRoom(roomId: string, userId: string): boolean {
     const room = this.getRoom(roomId);
     return room.users.some((user) => user.id === userId);
+  }
+
+  /**
+   * Verifies a plaintext password against the room's bcrypt hash.
+   * Always returns false for public rooms or rooms without a hash.
+   */
+  async isPasswordCorrect(roomId: string, password: string): Promise<boolean> {
+    const room = this.getRoom(roomId);
+    if (room.visibility !== 'private') {
+      return false;
+    }
+    return verifyPassword(password, room.passwordHash);
+  }
+
+  /**
+   * Makes sure a private room has an access token (creating and persisting
+   * one if it was missing, e.g. from a hand-edited store file).
+   */
+  async ensureAccessToken(roomId: string): Promise<string> {
+    const room = this.getRoom(roomId);
+    if (!room.accessToken) {
+      room.accessToken = randomUUID();
+      await this.persist();
+    }
+    return room.accessToken;
   }
 
   /**

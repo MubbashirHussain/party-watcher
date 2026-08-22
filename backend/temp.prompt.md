@@ -1,199 +1,91 @@
-# Step 3 — Room State & User Identity
+# Add Public & Private Rooms
 
-Fix the current room flow. Keep this implementation simple and in-memory/file-based. Do not introduce a database, WebSocket, or authentication yet.
-
-## Flow
-
-```text
-GET /
-  ↓
-Show movies
-  ↓
-User clicks a movie
-  ↓
-Create room
-  ↓
-Redirect to /room/:roomId
-```
-
-Example:
-
-```text
-http://localhost:3000/room/18393267846823789
-```
-
-## Room State
-
-Create:
-
-```text
-data/current.json
-```
-
-This file should contain the current active rooms.
-
-Use a clean structure similar to:
-
-```json
-{
-  "18393267846823789": {
-    "movieId": "67623782392",
-    "adminId": "user-uuid",
-    "users": [
-      {
-        "id": "user-uuid",
-        "name": "Alex"
-      }
-    ],
-    "playback": {
-      "paused": false,
-      "timeline": 0,
-      "quality": "720p"
-    }
-  }
-}
-```
-
-You may improve the exact key names/types if needed, but keep the structure simple.
+Add room visibility to the existing room system. Do not rewrite unrelated functionality.
 
 ## Room Creation
 
-When a user selects a movie:
+When creating a room, allow the host to choose:
 
-1. Generate a unique room ID.
-2. Generate a unique anonymous `userId`.
-3. Store the `userId` in a cookie.
-4. Create the room in `data/current.json`.
-5. Set the creator as `adminId`.
-6. Add the creator to `users`.
-7. Redirect to `/room/:roomId`.
+```text
+Public
+Private
+```
 
-The room URL must only contain the room ID:
+If **Private** is selected, require a password.
+
+Store the room state similar to:
+
+```json
+{
+  "id": "room-id",
+  "movieId": "movie-id",
+  "visibility": "private",
+  "passwordHash": "...",
+  "adminId": "user-id",
+  "users": []
+}
+```
+
+For public rooms:
+
+```json
+{
+  "visibility": "public"
+}
+```
+
+Do not store plaintext passwords.
+
+Use a secure password-hashing library such as `bcrypt` or `argon2`.
+
+## Joining
+
+### Public
 
 ```text
 /room/:roomId
+→ join directly
 ```
 
-Do not put the user ID or admin information in the URL.
-
-## Joining an Existing Room
-
-When another user opens:
+### Private
 
 ```text
-/room/18393267846823789
+/room/:roomId
+→ show password modal
+→ submit password
+→ validate on server
+→ allow access if correct
 ```
 
-the server should:
+Do not put the password in the URL or expose it to the client.
 
-1. Check the user's `userId` cookie.
-2. If the user already belongs to the room, continue normally.
-3. If this is a new user, show a **name modal** before entering the room.
+Incorrect passwords should show a clear error without exposing any sensitive information.
 
-The modal should ask:
+## UI
+
+Update the room creation UI with:
 
 ```text
-What's your name?
+Visibility
 
-[ Enter your name ]
+○ Public
+● Private
 
-[ Join Room ]
+Password: [••••••••]
 ```
 
-After submitting:
+Only show the password field when Private is selected.
 
-* Save the name against the user's `userId`.
-* Add the user to the room's `users` list.
-* Continue displaying the room.
+For private rooms, show a password modal when an unauthenticated/new user opens the room.
 
-Do not require authentication.
+Keep the existing anonymous `userId` cookie/session system.
 
-## Important User Identity Rule
+## Important
 
-Every visitor must have a unique anonymous `userId`.
-
-Use a cookie to persist it.
-
-Do not identify users by IP address. Multiple people can share the same IP, and the same person can change IPs.
-
-## Room State
-
-The room should initially contain:
-
-```text
-movieId
-adminId
-users
-playback.paused
-playback.timeline
-playback.quality
-```
-
-For now, these playback values are only state.
-
-**Do not implement synchronization yet.**
-
-The next step will use this state to synchronize playback between users.
-
-## Existing UI
-
-Keep the existing modern movie grid and room UI.
-
-Only change the flow/state management necessary for this step.
-
-The room page should now be able to display:
-
-* Movie
-* Current user's name
-* Admin status
-* Room users
-* Room ID/share URL
-
-Keep the room information overlay behavior from the previous step.
-
-## Persistence
-
-For this MVP, `data/current.json` is sufficient.
-
-Create safe helper/service functions for:
-
-* Creating a room
-* Finding a room
-* Updating a room
-* Adding a user
-* Reading/writing `current.json`
-
-Do not add a database or Redis.
-
-Handle concurrent file writes safely enough for this small MVP.
-
-## Verification
-
-Test this exact flow:
-
-```text
-Browser A
-GET /
-→ select movie
-→ room created
-→ Browser A becomes admin
-
-Browser A
-→ /room/ROOM_ID
-→ sees room
-
-Browser B
-→ opens same /room/ROOM_ID
-→ name modal appears
-→ enters name
-→ joins room
-
-current.json
-→ contains the room
-→ contains adminId
-→ contains both users
-→ contains playback state
-```
-
-Keep this implementation short, clean, and focused. Do not implement future synchronization functionality yet
-.
+* No database.
+* No WebSocket changes.
+* No playback synchronization.
+* No authentication system.
+* Keep `data/current.json` as the current room storage.
+* Keep the implementation small and focused.
+* Existing public rooms must continue working.

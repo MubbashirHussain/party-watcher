@@ -20,6 +20,9 @@ export interface PlaybackState {
   quality: string;
 }
 
+/** Whether a room is open to anyone or requires a password. */
+export type RoomVisibility = 'public' | 'private';
+
 /**
  * A watch room, persisted to `data/current.json` (no database).
  */
@@ -30,6 +33,19 @@ export interface Room {
   movieId: string;
   /** Anonymous user ID of the room creator. */
   adminId: string;
+  /**
+   * Visibility of the room. Private rooms require the correct password
+   * before a visitor can view the room or join it.
+   */
+  visibility: RoomVisibility;
+  /** bcrypt hash of the room password (private rooms only; never plaintext). */
+  passwordHash?: string;
+  /**
+   * Opaque access token generated when a private room is created. It is set
+   * in an httpOnly `pw_room_<roomId>` cookie after the password is verified,
+   * and grants access for the cookie's lifetime.
+   */
+  accessToken?: string;
   /** Users currently in the room. */
   users: RoomUser[];
   /** Playback state (stored only; synchronization comes later). */

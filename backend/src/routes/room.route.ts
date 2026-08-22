@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import view from "@fastify/view";
 import ejs from "ejs";
 import { z } from "zod";
@@ -11,16 +11,35 @@ import {
   type MovieCatalogService,
 } from "../services/movie-catalog.service.js";
 import { RoomNotFoundError, RoomService } from "../services/room.service.js";
-import { getOrCreateUserId } from "../utils/session.utils.js";
+import type { Room } from "../types/room.types.js";
+import {
+  getOrCreateUserId,
+  hasRoomAccess,
+  setRoomAccessCookie,
+} from "../utils/session.utils.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const createRoomBodySchema = z.object({
-  movieId: z
-    .string()
-    .min(1)
-    .regex(/^[a-z0-9-]+$/, "Invalid movie ID"),
-});
+const createRoomBodySchema = z
+  .object({
+    movieId: z
+      .string()
+      .min(1)
+      .regex(/^[a-z0-9-]+$/, "Invalid movie ID"),
+    visibility: z.enum(["public", "private"]).optional().default("public"),
+    password: z.string().min(4).max(72).optional(),
+  })
+  .superRefine((data, ctx) => {
+    // A password is required (and only relevant) for private rooms. The
+    // 72-char cap matches bcrypt's hard input limit.
+    if (data.visibility === "private" && !data.password) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["password"],
+        message: "Private rooms require a password",
+      });
+    }
+  });
 
 const roomParamsSchema = z.object({
   roomId: z.string().uuid(),
@@ -29,6 +48,73 @@ const roomParamsSchema = z.object({
 const joinBodySchema = z.object({
   name: z.string().trim().min(1).max(40),
 });
+
+const passwordBodySchema = z.object({
+  password: z.string().min(1).max(72),
+});
+
+interface RoomViewData {
+  roomId: string;
+  movieId: string;
+  movieTitle: string;
+  movieYear: string | number;
+  movieDuration: string;
+  roomUrl: string;
+  isAdmin: boolean;
+  userName: string | null;
+  roomUsers: string[];
+  roomVisibility: Room["visibility"];
+  needsPassword: boolean;
+  passwordError: boolean;
+}
+
+/**
+ * Assembles the data needed to render the room page. Private rooms that the
+ * visitor has not unlocked render a lock screen instead of the player.
+ */
+async function buildRoomViewData(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  catalog: MovieCatalogService,
+  rooms: RoomService,
+  room: Room,
+  passwordError: boolean,
+): Promise<RoomViewData> {
+  let metadata;
+  try {
+    metadata = catalog.getBySlug(room.movieId);
+  } catch {
+    throw new RoomNotFoundError();
+  }
+
+  const userId = getOrCreateUserId(request, reply);
+  const isAdmin = userId === room.adminId;
+  const userInRoom = room.users.find((user) => user.id === userId);
+  const needsPassword =
+    room.visibility === "private" &&
+    !isAdmin &&
+    !userInRoom &&
+    !hasRoomAccess(request, room.id, room.accessToken);
+
+  return {
+    roomId: room.id,
+    movieId: room.movieId,
+    movieTitle: metadata.title,
+    movieYear: metadata.year,
+    movieDuration: metadata.duration,
+    roomUrl: `${request.protocol}://${request.host}/room/${room.id}`,
+    isAdmin,
+    // The current user's display name (null if they have not joined).
+    userName: userInRoom?.name ?? null,
+    // Names of other users in the room (excludes the current user).
+    roomUsers: room.users
+      .filter((user) => user.id !== userId)
+      .map((user) => user.name),
+    roomVisibility: room.visibility,
+    needsPassword,
+    passwordError,
+  };
+}
 
 export async function roomRoutes(
   app: FastifyInstance,
@@ -49,41 +135,41 @@ export async function roomRoutes(
     },
   );
 
-  app.post<{ Body: { movieId?: string } }>("/rooms", async (request, reply) => {
-    const parsed = createRoomBodySchema.safeParse(request.body ?? {});
+  app.post<{ Body: { movieId?: string; visibility?: string; password?: string } }>(
+    "/rooms",
+    async (request, reply) => {
+      const parsed = createRoomBodySchema.safeParse(request.body ?? {});
 
-    if (!parsed.success) {
-      return reply.status(400).view("error", {
-        message: "Invalid movie selection. Go back and pick a movie.",
-      });
-    }
-    const { movieId } = parsed.data;
-    console.log(
-      "------------------------------------",
-      catalog,
-      UPLOAD_DIR,
-      movieId,
-    );
-
-    try {
-      const movie = await getMovie(catalog, UPLOAD_DIR, movieId);
-      // console.log("MOVIE FOUND", movie.path);
-    } catch (err) {
-      if (
-        err instanceof MovieNotFoundError ||
-        err instanceof MovieNotInCatalogError
-      ) {
-        return reply.status(404).view("not-found", {
-          message: "That movie does not exist.",
+      if (!parsed.success) {
+        return reply.status(400).view("error", {
+          message:
+            "Invalid room settings. Go back and pick a movie (private rooms need a password of 4–72 characters).",
         });
       }
-      throw err;
-    }
+      const { movieId, visibility, password } = parsed.data;
 
-    const userId = getOrCreateUserId(request, reply);
-    const room = await rooms.createRoom(movieId, userId);
-    return reply.redirect(`/room/${room.id}`);
-  });
+      try {
+        await getMovie(catalog, UPLOAD_DIR, movieId);
+      } catch (err) {
+        if (
+          err instanceof MovieNotFoundError ||
+          err instanceof MovieNotInCatalogError
+        ) {
+          return reply.status(404).view("not-found", {
+            message: "That movie does not exist.",
+          });
+        }
+        throw err;
+      }
+
+      const userId = getOrCreateUserId(request, reply);
+      const room = await rooms.createRoom(movieId, userId, {
+        visibility,
+        password,
+      });
+      return reply.redirect(`/room/${room.id}`);
+    },
+  );
 
   /**
    * Join a room with a display name. The name is stored against the user's
@@ -112,6 +198,20 @@ export async function roomRoutes(
         throw err;
       }
 
+      const userId = getOrCreateUserId(request, reply);
+      // Private rooms must be unlocked before joining. This prevents
+      // bypassing the password modal by POSTing straight to /join.
+      const userInRoom = room.users.some((user) => user.id === userId);
+      const isAdmin = userId === room.adminId;
+      if (
+        room.visibility === "private" &&
+        !isAdmin &&
+        !userInRoom &&
+        !hasRoomAccess(request, room.id, room.accessToken)
+      ) {
+        return reply.redirect(`/room/${room.id}`);
+      }
+
       const nameParsed = joinBodySchema.safeParse(request.body ?? {});
       if (!nameParsed.success) {
         return reply.status(400).view("not-found", {
@@ -119,13 +219,63 @@ export async function roomRoutes(
         });
       }
 
-      const userId = getOrCreateUserId(request, reply);
       await rooms.addUser(room.id, userId, nameParsed.data.name);
       return reply.redirect(`/room/${room.id}`);
     },
   );
 
-  app.get<{ Params: { roomId: string } }>(
+  /**
+   * Unlock a private room. A correct password sets the room's access-token
+   * cookie; a wrong one redirects back with ?pwError=1 so the lock screen
+   * can show a generic error (the password is never echoed back).
+   */
+  app.post<{ Params: { roomId: string }; Body: { password?: string } }>(
+    "/room/:roomId/password",
+    async (request, reply) => {
+      const roomParsed = roomParamsSchema.safeParse(request.params);
+      if (!roomParsed.success) {
+        return reply.status(404).view("not-found", {
+          message: "Invalid room link.",
+        });
+      }
+
+      let room;
+      try {
+        room = rooms.getRoom(roomParsed.data.roomId);
+      } catch (err) {
+        if (err instanceof RoomNotFoundError) {
+          return reply.status(404).view("not-found", {
+            message:
+              "Room not found. It may have expired or the link is wrong.",
+          });
+        }
+        throw err;
+      }
+
+      if (room.visibility !== "private") {
+        return reply.redirect(`/room/${room.id}`);
+      }
+
+      const passwordParsed = passwordBodySchema.safeParse(request.body ?? {});
+      if (!passwordParsed.success) {
+        return reply.redirect(`/room/${room.id}?pwError=1`, 303);
+      }
+
+      const correct = await rooms.isPasswordCorrect(
+        room.id,
+        passwordParsed.data.password,
+      );
+      if (!correct) {
+        return reply.redirect(`/room/${room.id}?pwError=1`, 303);
+      }
+
+      const accessToken = await rooms.ensureAccessToken(room.id);
+      setRoomAccessCookie(reply, room.id, accessToken);
+      return reply.redirect(`/room/${room.id}`, 303);
+    },
+  );
+
+  app.get<{ Params: { roomId: string }; Querystring: { pwError?: string } }>(
     "/room/:roomId",
     async (request, reply) => {
       const parsed = roomParamsSchema.safeParse(request.params);
@@ -148,35 +298,15 @@ export async function roomRoutes(
         throw err;
       }
 
-      let metadata;
-      try {
-        metadata = catalog.getBySlug(room.movieId);
-      } catch {
-        return reply.status(404).view("not-found", {
-          message: "The movie for this room is no longer available.",
-        });
-      }
-
-      const userId = getOrCreateUserId(request, reply);
-      const isAdmin = userId === room.adminId;
-      const userInRoom = room.users.find((user) => user.id === userId);
-      const roomUrl = `${request.protocol}://${request.host}/room/${room.id}`;
-
-      return reply.view("room", {
-        roomId: room.id,
-        movieId: room.movieId,
-        movieTitle: metadata.title,
-        movieYear: metadata.year,
-        movieDuration: metadata.duration,
-        roomUrl,
-        isAdmin,
-        // The current user's display name (null if they have not joined).
-        userName: userInRoom?.name ?? null,
-        // Names of other users in the room (excludes the current user).
-        roomUsers: room.users
-          .filter((user) => user.id !== userId)
-          .map((user) => user.name),
-      });
+      const data = await buildRoomViewData(
+        request,
+        reply,
+        catalog,
+        rooms,
+        room,
+        request.query.pwError === "1",
+      );
+      return reply.view("room", data);
     },
   );
 }

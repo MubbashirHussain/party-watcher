@@ -3,6 +3,7 @@
     "id": "4c046f8f-cc44-4cbc-853d-9f9d3dc94275",
     "movieId": "interstellar",
     "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
     "users": [
       {
         "id": "ece51819-98df-48b6-abee-2efcac04be24",
@@ -11,6 +12,218 @@
       {
         "id": "2a5f8fcc-3179-48e7-ab67-d1fa2526af82",
         "name": "it's me"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  },
+  "fb3bc352-b932-420a-aadd-c44dd81e5ebe": {
+    "id": "fb3bc352-b932-420a-aadd-c44dd81e5ebe",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  },
+  "3ac1dfda-a264-428a-a330-9493f2175170": {
+    "id": "3ac1dfda-a264-428a-a330-9493f2175170",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  },
+  "d3431312-d9ef-4240-872c-23b5bf533efd": {
+    "id": "d3431312-d9ef-4240-872c-23b5bf533efd",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  },
+  "9243e72c-3140-44bb-aa26-1483194b7cda": {
+    "id": "9243e72c-3140-44bb-aa26-1483194b7cda",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  },
+  "36fcb4e6-5b19-44c5-9cb0-fa49065c2d18": {
+    "id": "36fcb4e6-5b19-44c5-9cb0-fa49065c2d18",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  },
+  "8e73a996-9e43-4252-bdfe-c4794f6d6b48": {
+    "id": "8e73a996-9e43-4252-bdfe-c4794f6d6b48",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  },
+  "2fe0b00d-c8ca-4d5a-85a4-5d22c887b38a": {
+    "id": "2fe0b00d-c8ca-4d5a-85a4-5d22c887b38a",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  },
+  "ffc78c1b-82b1-42bc-a9a6-b7c3fe66e4cb": {
+    "id": "ffc78c1b-82b1-42bc-a9a6-b7c3fe66e4cb",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  },
+  "084daa3d-2004-4a78-8313-0e21be842361": {
+    "id": "084daa3d-2004-4a78-8313-0e21be842361",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  },
+  "f7f31c14-c03a-4f84-b222-e5f126d648dd": {
+    "id": "f7f31c14-c03a-4f84-b222-e5f126d648dd",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  },
+  "29b8eae6-7b8a-4e4e-b782-6df6176b9e78": {
+    "id": "29b8eae6-7b8a-4e4e-b782-6df6176b9e78",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      },
+      {
+        "id": "bb118cb4-4b75-4fa4-8276-8b6ec97fefeb",
+        "name": "mob"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    }
+  },
+  "fbcf4f95-3b4a-4cdc-a58a-8fbccd49a865": {
+    "id": "fbcf4f95-3b4a-4cdc-a58a-8fbccd49a865",
+    "movieId": "interstellar",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      },
+      {
+        "id": "9c0e4c2f-6789-4939-83e5-ee672e51a8b7",
+        "name": "hey"
       }
     ],
     "playback": {

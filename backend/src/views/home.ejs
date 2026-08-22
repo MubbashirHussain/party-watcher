@@ -54,6 +54,10 @@
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     <span class="font-medium">3,421 watching</span>
                 </div>
+                <button onclick="openAddMovieModal()" class="px-4 py-2 bg-accent hover:bg-accentHover text-white text-xs font-semibold rounded-xl shadow-lg shadow-accent/20 transition-all flex items-center space-x-1.5 cursor-pointer">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    <span>Add Movie</span>
+                </button>
             </div>
         </div>
     </header>
@@ -130,13 +134,10 @@
                                 </div>
                                 <div class="mt-5 pt-4 border-t border-zinc-800/60 flex items-center justify-between">
                                     <span class="text-xs text-zinc-500 font-medium">Synced Watch</span>
-                                    <form method="post" action="/rooms" class="m-0">
-                                        <input type="hidden" name="movieId" value="<%= movie.id %>" />
-                                        <button type="submit" class="px-3.5 py-2 bg-accent hover:bg-accentHover text-white text-xs font-semibold rounded-xl shadow-md shadow-accent/20 transition-all flex items-center space-x-1.5 cursor-pointer">
-                                            <span>Create Room</span>
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-                                        </button>
-                                    </form>
+                                    <button type="button" onclick="openCreateRoomModal('<%= movie.id %>', '<%= movie.title.replace(/'/g, "\\'") %>')" class="px-3.5 py-2 bg-accent hover:bg-accentHover text-white text-xs font-semibold rounded-xl shadow-md shadow-accent/20 transition-all flex items-center space-x-1.5 cursor-pointer">
+                                        <span>Create Room</span>
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                                    </button>
                                 </div>
                             </div>
                         </article>
@@ -150,10 +151,150 @@
         <p>&copy; 2026 Party Watch. Cinematic watch rooms for friends.</p>
     </footer>
 
+    <!-- Create Room Modal -->
+    <div id="createRoomModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-zinc-800/80 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl shadow-black relative">
+            <button type="button" onclick="closeCreateRoomModal()" class="absolute top-6 right-6 text-zinc-400 hover:text-white cursor-pointer">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <div class="w-12 h-12 rounded-2xl bg-accent/20 border border-accent/30 text-accent flex items-center justify-center mb-4 shadow-lg shadow-accent/20">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-1 tracking-tight">Create Screening Room</h3>
+            <p id="modalMovieTitle" class="text-sm text-zinc-400 mb-6 font-medium">Configure settings for your watch room.</p>
+            
+            <form id="createRoomForm" action="/rooms" method="POST" class="space-y-4">
+                <input type="hidden" id="modalMovieId" name="movieId" value="" />
+                
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2">Room Type</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="cursor-pointer">
+                            <input type="radio" name="roomType" value="public" checked onchange="toggleRoomType('public')" class="peer sr-only" />
+                            <div class="px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-center text-xs font-semibold text-zinc-400 peer-checked:bg-zinc-800 peer-checked:border-accent peer-checked:text-white transition-all shadow-sm">
+                                Public Room
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="roomType" value="private" onchange="toggleRoomType('private')" class="peer sr-only" />
+                            <div class="px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-center text-xs font-semibold text-zinc-400 peer-checked:bg-zinc-800 peer-checked:border-accent peer-checked:text-white transition-all shadow-sm">
+                                Private Room
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="passwordSection" class="hidden">
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">Room Password</label>
+                    <input 
+                        type="password" 
+                        id="roomPasswordInput" 
+                        name="password" 
+                        placeholder="Enter password (e.g. 1234)" 
+                        class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all" 
+                    />
+                </div>
+
+                <div class="pt-4 flex items-center justify-end space-x-3">
+                    <button type="button" onclick="closeCreateRoomModal()" class="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold rounded-xl transition-all cursor-pointer">Cancel</button>
+                    <button type="submit" class="px-5 py-2.5 bg-accent hover:bg-accentHover text-white text-xs font-semibold rounded-xl shadow-lg shadow-accent/20 transition-all cursor-pointer">Launch Room</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Movie Modal -->
+    <div id="addMovieModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-zinc-800/80 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl shadow-black relative">
+            <button onclick="closeAddMovieModal()" class="absolute top-6 right-6 text-zinc-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <div class="w-12 h-12 rounded-2xl bg-accent/20 border border-accent/30 text-accent flex items-center justify-center mb-4 shadow-lg shadow-accent/20">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/></svg>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-2 tracking-tight">Add Movie to Library</h3>
+            <p class="text-sm text-zinc-400 mb-6">Upload a video file and thumbnail to start a watch room with friends.</p>
+            
+            <form action="/movies" method="POST" enctype="multipart/form-data" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">Movie Title</label>
+                    <input type="text" name="title" required placeholder="e.g. Interstellar Odyssey" class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 transition-all" />
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">Genre</label>
+                        <select name="genre" class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 transition-all">
+                            <option value="Sci-Fi">Sci-Fi</option>
+                            <option value="Action">Action</option>
+                            <option value="Drama">Drama</option>
+                            <option value="Animation">Animation</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">Release Year</label>
+                        <input type="number" name="year" value="2026" required class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 transition-all" />
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">Video File (.mp4/.webm)</label>
+                        <input type="file" name="video" accept="video/*" required class="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-accent file:text-white hover:file:bg-accentHover cursor-pointer" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">Thumbnail Image (.jpg/.png)</label>
+                        <input type="file" name="thumbnail" accept="image/*" class="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200 hover:file:bg-zinc-700 cursor-pointer" />
+                    </div>
+                </div>
+
+                <div class="pt-4 flex items-center justify-end space-x-3">
+                    <button type="button" onclick="closeAddMovieModal()" class="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold rounded-xl transition-all">Cancel</button>
+                    <button type="submit" class="px-5 py-2.5 bg-accent hover:bg-accentHover text-white text-xs font-semibold rounded-xl shadow-lg shadow-accent/20 transition-all">Upload Movie</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         const searchInput = document.getElementById('searchInput');
         const movieGrid = document.getElementById('movieGrid');
         let currentCategory = 'all';
+
+        function openAddMovieModal() {
+            document.getElementById('addMovieModal').classList.remove('hidden');
+        }
+
+        function closeAddMovieModal() {
+            document.getElementById('addMovieModal').classList.add('hidden');
+        }
+
+        function openCreateRoomModal(movieId, movieTitle) {
+            document.getElementById('modalMovieId').value = movieId;
+            document.getElementById('modalMovieTitle').textContent = `Movie: ${movieTitle}`;
+            // Reset form state
+            document.querySelector('input[name="roomType"][value="public"]').checked = true;
+            toggleRoomType('public');
+            document.getElementById('roomPasswordInput').value = '';
+            document.getElementById('createRoomModal').classList.remove('hidden');
+        }
+
+        function closeCreateRoomModal() {
+            document.getElementById('createRoomModal').classList.add('hidden');
+        }
+
+        function toggleRoomType(type) {
+            const passwordSection = document.getElementById('passwordSection');
+            const passwordInput = document.getElementById('roomPasswordInput');
+            if (type === 'private') {
+                passwordSection.classList.remove('hidden');
+                passwordInput.setAttribute('required', 'required');
+            } else {
+                passwordSection.classList.add('hidden');
+                passwordInput.removeAttribute('required');
+                passwordInput.value = '';
+            }
+        }
 
         function filterMovies() {
             if (!movieGrid) return;
@@ -181,7 +322,6 @@
         function filterCategory(category) {
             currentCategory = category;
             
-            // Update button styles
             const buttons = document.querySelectorAll('.category-btn');
             buttons.forEach(btn => {
                 if (btn.textContent.trim().toLowerCase() === category.toLowerCase() || (category === 'all' && btn.textContent.trim() === 'All Genres')) {
