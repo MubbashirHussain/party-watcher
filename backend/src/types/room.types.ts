@@ -18,6 +18,8 @@ export interface PlaybackState {
   paused: boolean;
   timeline: number;
   quality: string;
+  /** Host playback rate (e.g. 1, 1.5, 2). Viewers match this. */
+  speed: number;
 }
 
 /** Whether a room is open to anyone or requires a password. */

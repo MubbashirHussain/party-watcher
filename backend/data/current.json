@@ -1,1 +1,67 @@
-{}
+{
+  "8d2c1333-7520-44e8-bc33-4e7479490e6c": {
+    "id": "8d2c1333-7520-44e8-bc33-4e7479490e6c",
+    "movieId": "inception",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "private",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      },
+      {
+        "id": "dbcf2637-351e-4da2-937e-8e30e98b30d9",
+        "name": "o"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 22.620278,
+      "quality": "720p"
+    },
+    "passwordHash": "$2b$12$OXUmPhB2KZqeWX72jkH77uDoQjmeWotcf/ftCtUm8BDMmLT/vrySS",
+    "accessToken": "fdf182fd-aad2-42b5-8e75-4c8ad490af5a"
+  },
+  "8a02ee18-db4b-4d84-b526-0c244f4a3548": {
+    "id": "8a02ee18-db4b-4d84-b526-0c244f4a3548",
+    "movieId": "the-dark-knight",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "private",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 0,
+      "quality": "720p"
+    },
+    "passwordHash": "$2b$12$0xIr3kbdRX9Xebbh/nfHU.w0B/ghG/EqPThrWXWX5oYgUsN0V30wa",
+    "accessToken": "dc2a18e0-afbe-4c31-b4bb-635e56165deb"
+  },
+  "ed3764af-89c0-4f90-b82f-92316ee8a750": {
+    "id": "ed3764af-89c0-4f90-b82f-92316ee8a750",
+    "movieId": "inception",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "private",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      },
+      {
+        "id": "dbcf2637-351e-4da2-937e-8e30e98b30d9",
+        "name": "0"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 18.209061,
+      "quality": "720p"
+    },
+    "passwordHash": "$2b$12$5moKRqo4mbWYOUuvedES1.j3thkVhvBNsvmxD/bsa8f5yZbluvpMm",
+    "accessToken": "8ab6504c-5395-4031-b10a-bf46c203c026"
+  }
+}

@@ -55,7 +55,11 @@ export async function buildApp() {
 
   await app.register(cookie);
   await app.register(formbody);
-  await app.register(roomRoutes, { catalog, rooms });
+  await app.register(roomRoutes, {
+    catalog,
+    rooms,
+    getConnectionCount: (roomId) => sync?.connectionCount(roomId) ?? 0,
+  });
   app.register(movieRoutes, { catalog });
 
   return { app, env };

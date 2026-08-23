@@ -12,7 +12,8 @@ export type PlaybackEvent =
   | { type: 'pause'; timeline: number }
   | { type: 'seek'; timeline: number }
   | { type: 'quality'; quality: string }
-  | { type: 'drift'; timeline: number };
+  | { type: 'drift'; timeline: number }
+  | { type: 'speed'; speed: number; timeline: number };
 
 const playbackEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('play'), timeline: z.number().min(0) }),
@@ -20,6 +21,11 @@ const playbackEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('seek'), timeline: z.number().min(0) }),
   z.object({ type: z.literal('quality'), quality: z.string().min(1).max(20) }),
   z.object({ type: z.literal('drift'), timeline: z.number().min(0) }),
+  z.object({
+    type: z.literal('speed'),
+    speed: z.number().min(0.25).max(4),
+    timeline: z.number().min(0),
+  }),
 ]);
 
 const roomIdSchema = z.string().uuid();
@@ -60,6 +66,10 @@ function applyPlaybackEvent(
       return { ...playback, quality: event.quality };
     case 'drift':
       return { ...playback, timeline: event.timeline };
+    case 'speed':
+      // Persist the host's timeline too so a fresh joiner gets the position
+      // AND speed at the moment of the change.
+      return { ...playback, speed: event.speed, timeline: event.timeline };
   }
 }
 
@@ -79,6 +89,13 @@ export class RoomSyncService {
   /** roomId → currently connected WebSockets. */
   private readonly connections = new Map<string, Set<WebSocket>>();
   private readonly meta = new WeakMap<WebSocket, ConnectionMeta>();
+  /** roomId → userId → number of open sockets from that user (for join/leave detection). */
+  private readonly socketCounts = new Map<string, Map<string, number>>();
+
+  /** Number of live WebSocket connections in a room (0 when none). */
+  connectionCount(roomId: string): number {
+    return this.connections.get(roomId)?.size ?? 0;
+  }
 
   constructor(
     server: HttpServer,
@@ -167,6 +184,15 @@ export class RoomSyncService {
     }
     roomClients.add(client);
 
+    // A real join is the first socket from this user (0 → 1). A reload moves
+    // 1 → 2 then back to 1, so it never crosses the 0↔1 boundary and never
+    // fires a false "joined"/"left" notification.
+    const count = this.bumpSocketCount(meta.roomId, meta.userId, 1);
+    if (count === 1) {
+      this.sendJoinNotification(meta, client);
+    }
+    this.notifyWatchCount(meta.roomId);
+
     client.on('message', (data) => this.handleMessage(client, data));
     client.on('close', () => this.handleClose(client));
     client.on('error', () => this.handleClose(client));
@@ -180,6 +206,64 @@ export class RoomSyncService {
       return;
     }
     this.send(client, { type: 'sync', playback: room.playback });
+  }
+
+  /** Increments/decrements a user's open socket count in a room. */
+  private bumpSocketCount(
+    roomId: string,
+    userId: string,
+    delta: number,
+  ): number {
+    let users = this.socketCounts.get(roomId);
+    if (!users) {
+      users = new Map();
+      this.socketCounts.set(roomId, users);
+    }
+    const next = (users.get(userId) ?? 0) + delta;
+    if (next <= 0) {
+      users.delete(userId);
+      if (users.size === 0) {
+        this.socketCounts.delete(roomId);
+      }
+    } else {
+      users.set(userId, next);
+    }
+    return Math.max(next, 0);
+  }
+
+  /** Broadcasts a "X joined"/"X left" toast to everyone except `except`. */
+  private sendJoinNotification(meta: ConnectionMeta, except: WebSocket): void {
+    const name = this.displayName(meta.roomId, meta.userId);
+    this.broadcast(meta.roomId, { type: 'notification', text: `${name} joined` }, except);
+  }
+
+  /** Broadcasts a "X left" toast to the remaining clients. */
+  private sendLeaveNotification(meta: ConnectionMeta): void {
+    const name = this.displayName(meta.roomId, meta.userId);
+    this.broadcast(meta.roomId, { type: 'notification', text: `${name} left` }, null);
+  }
+
+  /** The user's display name, falling back to "Someone". */
+  private displayName(roomId: string, userId: string): string {
+    try {
+      const room = this.rooms.getRoom(roomId);
+      const user = room.users.find((u) => u.id === userId);
+      if (user) return user.name;
+    } catch {
+      // Room gone — fall through to the generic label.
+    }
+    return 'Someone';
+  }
+
+  /** Broadcasts the live connected-socket count to every connection in the room. */
+  private notifyWatchCount(roomId: string): void {
+    const count = this.connectionCount(roomId);
+    const payload = JSON.stringify({ type: 'users', count });
+    for (const client of this.connections.get(roomId) ?? []) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(payload);
+      }
+    }
   }
 
   private handleMessage(client: WebSocket, data: RawData): void {
@@ -223,6 +307,14 @@ export class RoomSyncService {
     if (roomClients.size === 0) {
       this.connections.delete(meta.roomId);
     }
+
+    // A real leave is the user's last open socket (1 → 0). Reloads (2 → 1)
+    // never reach zero, so no false "left" toast.
+    const remaining = this.bumpSocketCount(meta.roomId, meta.userId, -1);
+    if (remaining === 0) {
+      this.sendLeaveNotification(meta);
+    }
+    this.notifyWatchCount(meta.roomId);
   }
 
   private connectionsFor(roomId: string): Set<WebSocket> {
@@ -240,8 +332,12 @@ export class RoomSyncService {
     }
   }
 
-  /** Sends a message to every connection in the room except `except`. */
-  private broadcast(roomId: string, message: unknown, except: WebSocket): void {
+  /** Sends a message to every connection in the room except `except` (null = everyone). */
+  private broadcast(
+    roomId: string,
+    message: unknown,
+    except: WebSocket | null,
+  ): void {
     const payload = JSON.stringify(message);
     for (const client of this.connections.get(roomId) ?? []) {
       if (client !== except && client.readyState === WebSocket.OPEN) {

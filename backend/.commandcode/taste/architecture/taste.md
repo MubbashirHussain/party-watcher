@@ -5,3 +5,5 @@
 - Do not rewrite existing working Step 1/Step 2 functionality; extend the codebase incrementally without breaking current behavior. Confidence: 0.75
 - The host is the source of truth for playback state; viewers must not send playback control events, and the server must reject such actions. Confidence: 0.70
 - Disable the playback speed change control for viewers (not just play/pause/seek) — a viewer altering speed changes their timeline and desyncs shared playback; only the host may change speed. Confidence: 0.70
+- On viewer join, sync the viewer to the host's current playback state first (including pause state) so they see correct state; and on viewer page reload, re-sync them to the host timeline so playback continues correctly. Confidence: 0.70
+- Playback speed must be shared over the WebSocket and persisted in the playback state so viewers match the host's speed in near-real-time; speed changes should also carry/correct the timeline so viewers don't drift apart. Confidence: 0.75

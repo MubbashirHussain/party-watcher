@@ -175,7 +175,7 @@
                             <% }); %>
                         <% } %>
                     </div>
-                    <span class="font-medium pl-1"><%= (typeof roomUsers !== 'undefined' && roomUsers.length ? roomUsers.length : 1) %> watching</span>
+                    <span id="watchCountEl" class="font-medium pl-1"><%= (typeof roomUsers !== 'undefined' && roomUsers.length ? roomUsers.length : 1) %> watching</span>
                 </div>
 
                 <button onclick="openInviteModal()" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold backdrop-blur-md border border-white/10 transition-all shadow-lg flex items-center space-x-2 cursor-pointer">
@@ -221,7 +221,7 @@
                 </div>
 
                 <div class="flex items-center space-x-2 sm:space-x-3">
-                    <div class="relative <%= !isAdmin ? 'hidden' : '' %>">
+                    <div class="relative">
                         <button id="speedBtn" onclick="toggleSpeedMenu()" class="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold text-zinc-200 transition-colors">1x</button>
                         <div id="speedMenu" class="hidden absolute bottom-full right-0 mb-2 w-28 bg-cardBg border border-zinc-800 rounded-xl shadow-2xl overflow-hidden py-1 z-30">
                             <button onclick="setSpeed(0.5)" class="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">0.5x</button>
@@ -303,6 +303,8 @@
         let pendingSeek = null;
         let ws = null;
         let wsConnected = false;
+        let reconnectTimer = null;
+        let statePollTimer = null;
 
         video.addEventListener('error', () => {
             video.style.display = 'none';
@@ -417,6 +419,9 @@
             video.playbackRate = rate;
             document.getElementById('speedBtn').textContent = `${rate}x`;
             document.getElementById('speedMenu').classList.add('hidden');
+            // Broadcast the new rate with the host's current position so
+            // viewers snap to the same timeline at the same moment.
+            sendPlaybackEvent({ type: 'speed', speed: rate, timeline: video.currentTime });
         }
 
         function toggleQualityMenu() {
@@ -432,8 +437,33 @@
             }
         }
 
-        // Playback speed is a personal preference — viewers may still adjust
-        // their own playback rate, and it is never broadcast.
+        // Playback speed is synced from the host — viewers see the host's
+        // rate and cannot change it.
+
+        function showToast(message) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className =
+                'bg-zinc-900/95 backdrop-blur-md border border-zinc-700/80 rounded-xl px-4 py-2 text-xs text-zinc-100 shadow-2xl transition-all duration-300 opacity-0 translate-y-2';
+            toast.textContent = message;
+            container.appendChild(toast);
+            requestAnimationFrame(() => {
+                toast.style.opacity = '1';
+                toast.style.transform = 'translateY(0)';
+            });
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-4px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        function updateWatchCount(count) {
+            const el = document.getElementById('watchCountEl');
+            if (el) {
+                el.textContent = `${count} watching`;
+            }
+        }
 
         function showControls() {
             topOverlay.style.opacity = '1';
@@ -482,6 +512,10 @@
 
             ws.onopen = () => {
                 wsConnected = true;
+                // Re-sync authoritative state from the API on every open
+                // (initial join AND reconnects) so the client converges even
+                // if a message was missed while disconnected.
+                resyncFromApi();
             };
 
             ws.onmessage = (event) => {
@@ -496,13 +530,43 @@
 
             ws.onclose = () => {
                 wsConnected = false;
-                // Reconnect automatically (e.g. after a temporary disconnect).
-                setTimeout(connectSync, 2000);
+                // Reconnect automatically (e.g. after a temporary disconnect
+                // or a page reload). clearTimeout in onopen prevents a timer
+                // and a live socket from ever double-connecting.
+                clearTimeout(reconnectTimer);
+                reconnectTimer = setTimeout(connectSync, 2000);
             };
 
             ws.onerror = () => {
                 ws.close();
             };
+        }
+
+        // Poll the state API while the socket is down so playback changes
+        // made by the host are still picked up during an outage.
+        function startStatePolling() {
+            clearInterval(statePollTimer);
+            statePollTimer = setInterval(() => {
+                if (!wsConnected) {
+                    resyncFromApi();
+                }
+            }, 5000);
+        }
+
+        async function resyncFromApi() {
+            try {
+                const res = await fetch(`/room/${ROOM_ID}/state`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.playback) {
+                    applyPlaybackState(data.playback);
+                }
+                if (typeof data.watchCount === 'number') {
+                    updateWatchCount(data.watchCount);
+                }
+            } catch {
+                // Socket + API both down — the reconnect loop will handle it.
+            }
         }
 
         function sendPlaybackEvent(event) {
@@ -527,9 +591,26 @@
                     break;
                 case 'quality':
                     document.getElementById('currentQuality').textContent = message.quality;
+                    if (!IS_ADMIN) showToast(`Host set quality to ${message.quality}`);
+                    break;
+                case 'speed':
+                    // Apply the new rate AND snap to the host's position at
+                    // the moment of the change so viewers don't drift apart.
+                    video.playbackRate = message.speed;
+                    document.getElementById('speedBtn').textContent = `${message.speed}x`;
+                    if (typeof message.timeline === 'number') {
+                        applyRemoteSeek(message.timeline);
+                    }
+                    if (!IS_ADMIN) showToast(`Host set speed to ${message.speed}x`);
                     break;
                 case 'drift':
                     applyDrift(message.timeline);
+                    break;
+                case 'users':
+                    updateWatchCount(message.count);
+                    break;
+                case 'notification':
+                    showToast(message.text);
                     break;
             }
         }
@@ -582,6 +663,13 @@
                 });
             }
             updatePlayButtons();
+
+            // If the metadata isn't loaded yet (fresh join or reload), the
+            // seek above was skipped. Queue the state and re-apply it as soon
+            // as the video becomes seekable so the timeline is still honored.
+            if (playback.timeline > 0 && video.readyState < 1) {
+                pendingSeek = playback.timeline;
+            }
         }
 
         // When a seek/play arrives before the video can seek, retry once the
@@ -593,14 +681,25 @@
             }
         });
 
+        // A freshly loaded video may still not be seekable immediately after
+        // metadata loads, so the queued sync is re-applied once the first
+        // frame is ready too. If playback is paused (the common reload case),
+        // 'canplay' still fires and the timeline is honored.
+        video.addEventListener('canplay', () => {
+            if (pendingSeek !== null && video.readyState >= 1) {
+                video.currentTime = pendingSeek;
+                pendingSeek = null;
+            }
+        });
+
         // Lightweight drift correction. The host broadcasts its current
         // timeline every few seconds while playing; viewers nudge themselves
-        // back only when they drift more than 2 seconds. No timeupdate-level
+        // back only when they drift more than 1 second. No timeupdate-level
         // message spam.
         function applyDrift(timeline) {
             if (video.paused || !video.duration) return;
             const diff = timeline - video.currentTime;
-            if (Math.abs(diff) > 2) {
+            if (Math.abs(diff) > 1) {
                 video.currentTime += Math.sign(diff) * Math.min(Math.abs(diff), 5);
             }
         }
@@ -609,8 +708,9 @@
             if (IS_ADMIN && wsConnected && !video.paused) {
                 sendPlaybackEvent({ type: 'drift', timeline: video.currentTime });
             }
-        }, 10000);
+        }, 5000);
 
+        startStatePolling();
         connectSync();
     </script>
     <% } %>

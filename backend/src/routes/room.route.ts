@@ -120,7 +120,12 @@ async function buildRoomViewData(
 
 export async function roomRoutes(
   app: FastifyInstance,
-  opts: { catalog: MovieCatalogService; rooms: RoomService },
+  opts: {
+    catalog: MovieCatalogService;
+    rooms: RoomService;
+    /** Live WebSocket connection count for a room (fallback: persisted users). */
+    getConnectionCount?: (roomId: string) => number;
+  },
 ): Promise<void> {
   const { UPLOAD_DIR } = loadEnv();
   const { catalog, rooms } = opts;
@@ -310,6 +315,49 @@ export async function roomRoutes(
         request.query.pwError === "1",
       );
       return reply.view("room", data);
+    },
+  );
+
+  /**
+   * JSON snapshot used by the client to re-sync after a socket reconnect or
+   * reload. Returns the room's current playback state (including speed) plus
+   * the live connected-socket count. Access rules mirror the page render.
+   */
+  app.get<{ Params: { roomId: string } }>(
+    "/room/:roomId/state",
+    async (request, reply) => {
+      const parsed = roomParamsSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.status(404).send({ error: "Invalid room link." });
+      }
+
+      let room;
+      try {
+        room = rooms.getRoom(parsed.data.roomId);
+      } catch (err) {
+        if (err instanceof RoomNotFoundError) {
+          return reply.status(404).send({ error: "Room not found." });
+        }
+        throw err;
+      }
+
+      const userId = getOrCreateUserId(request, reply);
+      const isAdmin = userId === room.adminId;
+      const userInRoom = room.users.some((user) => user.id === userId);
+      if (
+        room.visibility === "private" &&
+        !isAdmin &&
+        !userInRoom &&
+        !hasRoomAccess(request, room.id, room.accessToken)
+      ) {
+        return reply.status(403).send({ error: "Forbidden." });
+      }
+
+      return reply.send({
+        playback: room.playback,
+        watchCount:
+          opts.getConnectionCount?.(room.id) ?? room.users.length,
+      });
     },
   );
 }

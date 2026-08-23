@@ -35,6 +35,10 @@ const playbackSchema = z.object({
   paused: z.boolean(),
   timeline: z.number(),
   quality: z.string(),
+  // Rooms created before speed existed default to 1 so existing rooms keep
+  // working. The default is materialized in memory and written back on the
+  // next persist().
+  speed: z.number().min(0.25).max(4).default(1),
 });
 
 const roomSchema = z.object({
@@ -116,7 +120,7 @@ export class RoomService {
       adminId,
       visibility,
       users: [{ id: adminId, name: 'Host' }],
-      playback: { paused: false, timeline: 0, quality: '720p' },
+      playback: { paused: false, timeline: 0, quality: '720p', speed: 1 },
     };
     if (visibility === 'private') {
       room.passwordHash = await hashPassword(options.password!);
