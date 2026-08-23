@@ -371,34 +371,54 @@ describe('WebSocket playback sync', () => {
     host.ws.close();
   });
 
-  it('notifies others when someone joins or leaves (but not on reload)', async () => {
-    const { roomId, cookie: hostCookie } = await createRoom();
-    const { cookie: viewerCookie } = await joinRoom(roomId);
+  it(
+    'notifies joins/leaves but treats a reload as a reconnect',
+    async () => {
+      const { roomId, cookie: hostCookie } = await createRoom();
+      const { cookie: viewerCookie } = await joinRoom(roomId);
 
-    const host = await connectRecording(roomId, hostCookie);
-    const hostCursor = { n: 0 };
-    // Drain the initial users message on the host socket.
-    await waitForMessage(host.messages, 'users', hostCursor);
+      const host = await connectRecording(roomId, hostCookie);
+      const hostCursor = { n: 0 };
+      // Drain the initial users message on the host socket.
+      await waitForMessage(host.messages, 'users', hostCursor);
 
-    // Viewer joins → host gets a "joined" notification, viewer does not.
-    const viewer = await connectRecording(roomId, viewerCookie);
-    const joinNotice = await waitForMessage(host.messages, 'notification', hostCursor);
-    expect(joinNotice.text).toMatch(/joined/);
-    await new Promise((resolve) => setTimeout(resolve, 200));
+      // Viewer joins → host gets a "joined" notification.
+      const viewer = await connectRecording(roomId, viewerCookie);
+      const joinNotice = await waitForMessage(
+        host.messages,
+        'notification',
+        hostCursor,
+      );
+      expect(joinNotice.text).toMatch(/joined/);
 
-    // Same user reconnects (simulated reload) → no new join notification
-    // because it never crossed 0 → 1 again, and no "left" either.
-    const reloadedViewer = await connectRecording(roomId, viewerCookie);
-    await new Promise((resolve) => setTimeout(resolve, 500));
+      // Simulated reload: the old socket closes FIRST, then the same user
+      // reconnects within the grace window. Neither "left" nor "joined"
+      // should be announced (it's a reconnect, not a leave + join).
+      viewer.ws.close();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const reloadedViewer = await connectRecording(roomId, viewerCookie);
+      // Give any (incorrect) notification time to arrive.
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      expect(
+        host.messages
+          .slice(hostCursor.n)
+          .filter((m) => m.type === 'notification'),
+      ).toHaveLength(0);
 
-    // Viewer leaves → host gets a "left" notification.
-    viewer.ws.close();
-    reloadedViewer.ws.close();
-    const leaveNotice = await waitForMessage(host.messages, 'notification', hostCursor);
-    expect(leaveNotice.text).toMatch(/left/);
+      // Genuine leave: the reloaded viewer disconnects and does NOT come back.
+      reloadedViewer.ws.close();
+      const leaveNotice = await waitForMessage(
+        host.messages,
+        'notification',
+        hostCursor,
+        8000, // leave toast is delayed by the 5s grace window
+      );
+      expect(leaveNotice.text).toMatch(/left/);
 
-    host.ws.close();
-  });
+      host.ws.close();
+    },
+    15000,
+  );
 
   it('exposes current playback state and live count via the API', async () => {
     const { roomId, cookie: hostCookie } = await createRoom();

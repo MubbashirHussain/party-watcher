@@ -91,6 +91,15 @@ export class RoomSyncService {
   private readonly meta = new WeakMap<WebSocket, ConnectionMeta>();
   /** roomId → userId → number of open sockets from that user (for join/leave detection). */
   private readonly socketCounts = new Map<string, Map<string, number>>();
+  /**
+   * roomId → userId → pending "left" timer. A real leave is only announced
+   * after `leaveGraceMs` without a reconnect, so a page reload (old socket
+   * closes → new page reconnects) never fires "left" + "joined" toasts.
+   */
+  private readonly pendingLeaves = new Map<string, Map<string, NodeJS.Timeout>>();
+
+  /** How long to wait for a same-user reconnect before announcing a leave. */
+  private readonly leaveGraceMs: number;
 
   /** Number of live WebSocket connections in a room (0 when none). */
   connectionCount(roomId: string): number {
@@ -100,7 +109,9 @@ export class RoomSyncService {
   constructor(
     server: HttpServer,
     private readonly rooms: RoomService,
+    leaveGraceMs = 5000,
   ) {
+    this.leaveGraceMs = leaveGraceMs;
     this.wss = new WebSocketServer({ noServer: true });
     server.on('upgrade', (request, socket, head) => {
       this.handleUpgrade(request, socket, head);
@@ -185,10 +196,12 @@ export class RoomSyncService {
     roomClients.add(client);
 
     // A real join is the first socket from this user (0 → 1). A reload moves
-    // 1 → 2 then back to 1, so it never crosses the 0↔1 boundary and never
-    // fires a false "joined"/"left" notification.
+    // 1 → 2 then back to 1 (or, when the old socket closes first, 0 → 1
+    // within the leave grace window) — both cases are detected via the
+    // pending-leave timer and never fire a false "joined" toast.
     const count = this.bumpSocketCount(meta.roomId, meta.userId, 1);
-    if (count === 1) {
+    const rejoined = this.cancelPendingLeave(meta.roomId, meta.userId);
+    if (count === 1 && !rejoined) {
       this.sendJoinNotification(meta, client);
     }
     this.notifyWatchCount(meta.roomId);
@@ -308,13 +321,45 @@ export class RoomSyncService {
       this.connections.delete(meta.roomId);
     }
 
-    // A real leave is the user's last open socket (1 → 0). Reloads (2 → 1)
-    // never reach zero, so no false "left" toast.
+    // A real leave is the user's last open socket (1 → 0). Announce it only
+    // after the grace window, so a page reload (same user reconnects within
+    // the window) is treated as a reconnect, not a leave + join.
     const remaining = this.bumpSocketCount(meta.roomId, meta.userId, -1);
     if (remaining === 0) {
-      this.sendLeaveNotification(meta);
+      this.scheduleLeaveNotification(meta);
     }
     this.notifyWatchCount(meta.roomId);
+  }
+
+  /** Schedules a "X left" toast after the grace window (cancelled on reconnect). */
+  private scheduleLeaveNotification(meta: ConnectionMeta): void {
+    let roomPending = this.pendingLeaves.get(meta.roomId);
+    if (!roomPending) {
+      roomPending = new Map();
+      this.pendingLeaves.set(meta.roomId, roomPending);
+    }
+    const timer = setTimeout(() => {
+      roomPending.delete(meta.userId);
+      if (roomPending.size === 0) {
+        this.pendingLeaves.delete(meta.roomId);
+      }
+      this.sendLeaveNotification(meta);
+    }, this.leaveGraceMs);
+    roomPending.set(meta.userId, timer);
+  }
+
+  /** Cancels a pending leave (the user reconnected). Returns true if cancelled. */
+  private cancelPendingLeave(roomId: string, userId: string): boolean {
+    const roomPending = this.pendingLeaves.get(roomId);
+    if (!roomPending) return false;
+    const timer = roomPending.get(userId);
+    if (!timer) return false;
+    clearTimeout(timer);
+    roomPending.delete(userId);
+    if (roomPending.size === 0) {
+      this.pendingLeaves.delete(roomId);
+    }
+    return true;
   }
 
   private connectionsFor(roomId: string): Set<WebSocket> {
@@ -352,6 +397,11 @@ export class RoomSyncService {
       for (const client of roomClients) client.close();
     }
     this.connections.clear();
+    // Cancel any pending "left" timers so nothing fires after shutdown.
+    for (const roomPending of this.pendingLeaves.values()) {
+      for (const timer of roomPending.values()) clearTimeout(timer);
+    }
+    this.pendingLeaves.clear();
     // wss.close() only calls its callback when the server is listening, so
     // resolve unconditionally instead of waiting forever on a callback.
     this.wss.close();

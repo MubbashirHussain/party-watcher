@@ -4,6 +4,8 @@
     "movieId": "inception",
     "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
     "visibility": "private",
+    "passwordHash": "$2b$12$OXUmPhB2KZqeWX72jkH77uDoQjmeWotcf/ftCtUm8BDMmLT/vrySS",
+    "accessToken": "fdf182fd-aad2-42b5-8e75-4c8ad490af5a",
     "users": [
       {
         "id": "ece51819-98df-48b6-abee-2efcac04be24",
@@ -17,16 +19,17 @@
     "playback": {
       "paused": false,
       "timeline": 22.620278,
-      "quality": "720p"
-    },
-    "passwordHash": "$2b$12$OXUmPhB2KZqeWX72jkH77uDoQjmeWotcf/ftCtUm8BDMmLT/vrySS",
-    "accessToken": "fdf182fd-aad2-42b5-8e75-4c8ad490af5a"
+      "quality": "720p",
+      "speed": 1
+    }
   },
   "8a02ee18-db4b-4d84-b526-0c244f4a3548": {
     "id": "8a02ee18-db4b-4d84-b526-0c244f4a3548",
     "movieId": "the-dark-knight",
     "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
     "visibility": "private",
+    "passwordHash": "$2b$12$0xIr3kbdRX9Xebbh/nfHU.w0B/ghG/EqPThrWXWX5oYgUsN0V30wa",
+    "accessToken": "dc2a18e0-afbe-4c31-b4bb-635e56165deb",
     "users": [
       {
         "id": "ece51819-98df-48b6-abee-2efcac04be24",
@@ -36,16 +39,17 @@
     "playback": {
       "paused": false,
       "timeline": 0,
-      "quality": "720p"
-    },
-    "passwordHash": "$2b$12$0xIr3kbdRX9Xebbh/nfHU.w0B/ghG/EqPThrWXWX5oYgUsN0V30wa",
-    "accessToken": "dc2a18e0-afbe-4c31-b4bb-635e56165deb"
+      "quality": "720p",
+      "speed": 1
+    }
   },
   "ed3764af-89c0-4f90-b82f-92316ee8a750": {
     "id": "ed3764af-89c0-4f90-b82f-92316ee8a750",
     "movieId": "inception",
     "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
     "visibility": "private",
+    "passwordHash": "$2b$12$5moKRqo4mbWYOUuvedES1.j3thkVhvBNsvmxD/bsa8f5yZbluvpMm",
+    "accessToken": "8ab6504c-5395-4031-b10a-bf46c203c026",
     "users": [
       {
         "id": "ece51819-98df-48b6-abee-2efcac04be24",
@@ -59,9 +63,30 @@
     "playback": {
       "paused": false,
       "timeline": 18.209061,
-      "quality": "720p"
-    },
-    "passwordHash": "$2b$12$5moKRqo4mbWYOUuvedES1.j3thkVhvBNsvmxD/bsa8f5yZbluvpMm",
-    "accessToken": "8ab6504c-5395-4031-b10a-bf46c203c026"
+      "quality": "720p",
+      "speed": 1
+    }
+  },
+  "639bac19-3425-42b3-9e90-13b96f4f05dd": {
+    "id": "639bac19-3425-42b3-9e90-13b96f4f05dd",
+    "movieId": "inception",
+    "adminId": "ece51819-98df-48b6-abee-2efcac04be24",
+    "visibility": "public",
+    "users": [
+      {
+        "id": "ece51819-98df-48b6-abee-2efcac04be24",
+        "name": "Host"
+      },
+      {
+        "id": "dbcf2637-351e-4da2-937e-8e30e98b30d9",
+        "name": "k"
+      }
+    ],
+    "playback": {
+      "paused": false,
+      "timeline": 23.411298,
+      "quality": "720p",
+      "speed": 2
+    }
   }
 }

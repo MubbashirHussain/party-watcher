@@ -9,6 +9,10 @@
 
 # Architecture
 See [architecture/taste.md](architecture/taste.md)
+# Workflow
+
+- This project runs on macOS, where the `timeout` command does not exist. To verify the server starts cleanly, launch it in the background, sleep briefly, check with `kill -0 $PID`, then kill it rather than using `timeout`. Confidence: 0.60
+
 # Project Constraints
 
 - Do not introduce a database, Redis, or any external data store for this project. Confidence: 0.85
