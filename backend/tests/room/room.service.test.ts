@@ -106,12 +106,16 @@ describe('RoomService', () => {
       paused: true,
       timeline: 120.5,
       quality: '1080p',
+      speed: 1,
+      updatedAt: 1234567890,
     });
 
     expect(updated.playback).toEqual({
       paused: true,
       timeline: 120.5,
       quality: '1080p',
+      speed: 1,
+      updatedAt: 1234567890,
     });
 
     const persisted = JSON.parse(
@@ -121,6 +125,8 @@ describe('RoomService', () => {
       paused: true,
       timeline: 120.5,
       quality: '1080p',
+      speed: 1,
+      updatedAt: 1234567890,
     });
   });
 });

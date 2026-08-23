@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(npx vitest run tests/room/room-sync.test.ts 2 >& 1)",
+      "Shell(npx tsc --noEmit)",
+      "Shell(npx vitest run tests/room/room-sync.test.ts)",
+      "Shell(npm:*)",
+      "Shell(grep:*)",
+      "Shell(git:*)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

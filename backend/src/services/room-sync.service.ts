@@ -186,22 +186,31 @@ export class RoomSyncService {
     const roomClients = this.connectionsFor(meta.roomId);
 
     // Replace a stale connection from the same user (e.g. after a reload) so
-    // reconnecting never leaves duplicate sockets behind.
+    // reconnecting never leaves duplicate sockets behind. The stale socket is
+    // removed from the room set, its meta dropped (so its late close/error
+    // events are ignored by handleClose) and its per-user count decremented
+    // SYNCHRONOUSLY here — otherwise the count transiently reads too high
+    // (and stays inflated if the close event never fires).
+    let replaced = false;
     for (const existing of roomClients) {
       const previous = this.meta.get(existing);
       if (previous && previous.userId === meta.userId && existing !== client) {
+        roomClients.delete(existing);
+        this.meta.delete(existing);
+        this.bumpSocketCount(meta.roomId, meta.userId, -1);
         existing.close(4001, 'Replaced by a newer connection');
+        replaced = true;
       }
     }
     roomClients.add(client);
 
-    // A real join is the first socket from this user (0 → 1). A reload moves
-    // 1 → 2 then back to 1 (or, when the old socket closes first, 0 → 1
-    // within the leave grace window) — both cases are detected via the
-    // pending-leave timer and never fire a false "joined" toast.
+    // A real join is the first socket from this user (0 → 1) with no pending
+    // leave and no replaced socket. A reload either replaces a live socket
+    // (replaced) or reconnects within the leave grace window (rejoined) —
+    // neither fires a false "joined" toast.
     const count = this.bumpSocketCount(meta.roomId, meta.userId, 1);
     const rejoined = this.cancelPendingLeave(meta.roomId, meta.userId);
-    if (count === 1 && !rejoined) {
+    if (count === 1 && !rejoined && !replaced) {
       this.sendJoinNotification(meta, client);
     }
     this.notifyWatchCount(meta.roomId);
@@ -211,14 +220,16 @@ export class RoomSyncService {
     client.on('error', () => this.handleClose(client));
 
     // Send the current playback state so the new client matches the host.
-    let room: Room;
+    // getPlayback extrapolates the timeline to "now" while the room is
+    // playing, so a reloader resumes at the live position.
+    let playback: PlaybackState;
     try {
-      room = this.rooms.getRoom(meta.roomId);
+      playback = this.rooms.getPlayback(meta.roomId);
     } catch {
       client.close();
       return;
     }
-    this.send(client, { type: 'sync', playback: room.playback });
+    this.send(client, { type: 'sync', playback });
   }
 
   /** Increments/decrements a user's open socket count in a room. */
@@ -305,7 +316,13 @@ export class RoomSyncService {
 
     // Persist so a newly joining client receives the current state. A failed
     // write must not interrupt live sync, so the result is not awaited here.
-    const playback = applyPlaybackEvent(room.playback, event.data);
+    // updatedAt stamps when the timeline was set, letting the server
+    // extrapolate the live position for clients that join or reload while
+    // the room is playing.
+    const playback = {
+      ...applyPlaybackEvent(room.playback, event.data),
+      updatedAt: Date.now(),
+    };
     void this.rooms.updatePlayback(meta.roomId, playback).catch(() => {});
 
     this.broadcast(meta.roomId, event.data, client);
@@ -314,6 +331,10 @@ export class RoomSyncService {
   private handleClose(client: WebSocket): void {
     const meta = this.meta.get(client);
     if (!meta) return;
+    // Both 'error' and 'close' can fire for a single dead socket, and a
+    // socket replaced by a newer connection still emits its own close later —
+    // dropping the meta here makes close handling run at most once.
+    this.meta.delete(client);
     const roomClients = this.connections.get(meta.roomId);
     if (!roomClients) return;
     roomClients.delete(client);

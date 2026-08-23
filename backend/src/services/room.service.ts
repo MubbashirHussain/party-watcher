@@ -39,6 +39,9 @@ const playbackSchema = z.object({
   // working. The default is materialized in memory and written back on the
   // next persist().
   speed: z.number().min(0.25).max(4).default(1),
+  // Rooms persisted before updatedAt existed default to 0 ("never played"),
+  // which disables timeline extrapolation until the first host event.
+  updatedAt: z.number().default(0),
 });
 
 const roomSchema = z.object({
@@ -120,7 +123,9 @@ export class RoomService {
       adminId,
       visibility,
       users: [{ id: adminId, name: 'Host' }],
-      playback: { paused: false, timeline: 0, quality: '720p', speed: 1 },
+      // updatedAt stays 0 ("never played") so a freshly created room is not
+      // extrapolated forward before the host's first playback event.
+      playback: { paused: false, timeline: 0, quality: '720p', speed: 1, updatedAt: 0 },
     };
     if (visibility === 'private') {
       room.passwordHash = await hashPassword(options.password!);
@@ -138,6 +143,22 @@ export class RoomService {
       throw new RoomNotFoundError();
     }
     return room;
+  }
+
+  /**
+   * Returns the room's playback state with the timeline extrapolated to
+   * "now" while the room is playing (elapsed × speed since the last host
+   * event). A client that joins or reloads mid-playback lands on the live
+   * position instead of the stale position of the last event. Paused rooms
+   * (and rooms never played) are returned unchanged.
+   */
+  getPlayback(roomId: string): Room['playback'] {
+    const playback = this.getRoom(roomId).playback;
+    if (playback.paused || playback.updatedAt <= 0) {
+      return playback;
+    }
+    const elapsed = ((Date.now() - playback.updatedAt) / 1000) * playback.speed;
+    return { ...playback, timeline: playback.timeline + Math.max(elapsed, 0) };
   }
 
   /** Returns whether the user is already in the room. */

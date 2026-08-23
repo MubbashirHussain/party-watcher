@@ -20,6 +20,14 @@ export interface PlaybackState {
   quality: string;
   /** Host playback rate (e.g. 1, 1.5, 2). Viewers match this. */
   speed: number;
+  /**
+   * Epoch milliseconds when the timeline was last set by a host event. The
+   * server extrapolates the live position of a playing room from this, so a
+   * client that joins or reloads lands on the current position instead of
+   * the position at the last host event. 0 means "never played" — no
+   * extrapolation until the first host event.
+   */
+  updatedAt: number;
 }
 
 /** Whether a room is open to anyone or requires a password. */

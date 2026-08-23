@@ -354,7 +354,9 @@ export async function roomRoutes(
       }
 
       return reply.send({
-        playback: room.playback,
+        // getPlayback extrapolates the timeline to "now" while the room is
+        // playing, so a reloaded client resumes at the live position.
+        playback: rooms.getPlayback(room.id),
         watchCount:
           opts.getConnectionCount?.(room.id) ?? room.users.length,
       });

@@ -125,13 +125,13 @@
             poster="/movie/<%= movieId %>/thumbnail"
         ></video>
 
-        <div id="videoMockOverlay" class="absolute inset-0 bg-zinc-950 flex flex-col items-center justify-center text-center p-6 hidden">
+        <!-- <div id="videoMockOverlay" class="absolute inset-0 bg-zinc-950 flex flex-col items-center justify-center text-center p-6 hidden">
             <div class="w-20 h-20 rounded-3xl bg-accent/20 border border-accent/40 flex items-center justify-center text-accent mb-4 shadow-xl shadow-accent/10">
                 <svg class="w-10 h-10 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
             </div>
             <h2 class="text-xl font-bold text-white mb-1"><%= typeof movieTitle !== 'undefined' ? movieTitle : 'Movie' %></h2>
             <p class="text-sm text-zinc-400">Cinematic Watch Room Active</p>
-        </div>
+        </div> -->
 
         <div id="centerPlayIndicator" class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 transition-opacity duration-300">
             <div class="w-20 h-20 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white text-3xl shadow-2xl">
@@ -253,6 +253,9 @@
         </div>
     </div>
 
+    <!-- Toast notification container -->
+    <div id="toastContainer" class="fixed top-6 right-6 z-50 flex flex-col space-y-2 items-end pointer-events-none"></div>
+
     <div id="inviteModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
         <div class="bg-cardBg border border-zinc-800/80 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl shadow-black relative">
             <button onclick="closeInviteModal()" class="absolute top-6 right-6 text-zinc-400 hover:text-white">
@@ -304,7 +307,30 @@
         let ws = null;
         let wsConnected = false;
         let reconnectTimer = null;
+        let reconnectAttempts = 0;
         let statePollTimer = null;
+        // Set when the browser blocks play() after a reload (autoplay policy
+        // requires a user gesture on the fresh page). The next click on the
+        // player resumes playback instead of showing the error overlay.
+        let autoplayBlocked = false;
+
+        // Plays the video, distinguishing a real failure (missing/unplayable
+        // file → mock overlay) from an autoplay block after a reload
+        // (NotAllowedError → static ▶ prompt; the next click resumes).
+        function requestPlay() {
+            video.play().then(() => {
+                autoplayBlocked = false;
+                centerPlayIndicator.style.opacity = '0';
+            }).catch((err) => {
+                if (err && err.name === 'NotAllowedError') {
+                    autoplayBlocked = true;
+                    centerIcon.textContent = '▶';
+                    centerPlayIndicator.style.opacity = '1';
+                } else {
+                    videoMockOverlay.classList.remove('hidden');
+                }
+            });
+        }
 
         video.addEventListener('error', () => {
             video.style.display = 'none';
@@ -322,9 +348,7 @@
             // Viewers never control playback; only the host's actions are sent.
             if (!IS_ADMIN) return;
             if (video.paused) {
-                video.play().catch(() => {
-                    videoMockOverlay.classList.remove('hidden');
-                });
+                requestPlay();
                 sendPlaybackEvent({ type: 'play', timeline: video.currentTime });
             } else {
                 video.pause();
@@ -349,13 +373,24 @@
         playPauseBtn.addEventListener('click', togglePlay);
         playerContainer.addEventListener('click', (e) => {
             if (e.target.closest('#topOverlay') || e.target.closest('#bottomOverlay')) return;
+            if (autoplayBlocked) {
+                // The browser blocked autoplay after a reload — this click is
+                // the gesture that unlocks playback. Resume locally without
+                // toggling or broadcasting; the room state already says
+                // "playing". This is also the viewer's only way to resume,
+                // since viewers cannot toggle playback.
+                requestPlay();
+                updatePlayButtons();
+                return;
+            }
             togglePlay();
         });
 
         function triggerCenterAnimation() {
             centerPlayIndicator.style.opacity = '1';
             setTimeout(() => {
-                centerPlayIndicator.style.opacity = '0';
+                // Keep the ▶ prompt up while autoplay is still blocked.
+                centerPlayIndicator.style.opacity = autoplayBlocked ? '1' : '0';
             }, 600);
         }
 
@@ -512,10 +547,15 @@
 
             ws.onopen = () => {
                 wsConnected = true;
-                // Re-sync authoritative state from the API on every open
-                // (initial join AND reconnects) so the client converges even
-                // if a message was missed while disconnected.
-                resyncFromApi();
+                reconnectAttempts = 0;
+                // Cancel any pending reconnect timer so we never create a
+                // second connection while this one is alive.
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+                // The server sends a 'sync' message with the full playback
+                // state immediately on connect (see setupClient), so the
+                // client does NOT need to call resyncFromApi() here. Doing
+                // both would race and double-apply play()/seek().
             };
 
             ws.onmessage = (event) => {
@@ -528,13 +568,20 @@
                 handleSyncMessage(message);
             };
 
-            ws.onclose = () => {
+            ws.onclose = (event) => {
                 wsConnected = false;
-                // Reconnect automatically (e.g. after a temporary disconnect
-                // or a page reload). clearTimeout in onopen prevents a timer
-                // and a live socket from ever double-connecting.
+                // 4001 = the server replaced this socket with a newer
+                // connection from the same user (a reload or second tab).
+                // The newest page owns the room socket — reconnecting here
+                // would make two tabs fight over the connection.
+                if (event.code === 4001) return;
+                // Reconnect automatically with backoff (2s → 4s → 8s …
+                // capped at 15s) so a server restart or network blip is
+                // survived without hammering the server.
                 clearTimeout(reconnectTimer);
-                reconnectTimer = setTimeout(connectSync, 2000);
+                const delay = Math.min(2000 * 2 ** reconnectAttempts, 15000);
+                reconnectAttempts += 1;
+                reconnectTimer = setTimeout(connectSync, delay);
             };
 
             ws.onerror = () => {
@@ -624,14 +671,16 @@
                 video.currentTime = timeline;
                 pendingSeek = null;
             }
-            video.play().catch(() => {
-                videoMockOverlay.classList.remove('hidden');
-            });
+            requestPlay();
             updatePlayButtons();
             triggerCenterAnimation();
         }
 
         function applyRemotePause(timeline) {
+            // The room is paused now — any pending autoplay-block prompt is
+            // stale and must not resume playback on the next click.
+            autoplayBlocked = false;
+            centerPlayIndicator.style.opacity = '0';
             pendingSeek = timeline;
             video.pause();
             if (video.currentTime !== timeline) {
@@ -652,15 +701,33 @@
             if (playback.quality) {
                 document.getElementById('currentQuality').textContent = playback.quality;
             }
+            // Restore the playback speed so viewers and a reloaded host both
+            // match the persisted rate (was missing — speed reset to 1x on
+            // every reload).
+            if (typeof playback.speed === 'number' && playback.speed > 0) {
+                video.playbackRate = playback.speed;
+                document.getElementById('speedBtn').textContent = `${playback.speed}x`;
+            }
             if (playback.timeline > 0 && video.readyState >= 1) {
-                video.currentTime = playback.timeline;
+                video.currentTime = video.duration
+                    ? Math.min(playback.timeline, video.duration)
+                    : playback.timeline;
             }
             if (targetPaused) {
+                // Paused state — clear any stale autoplay-block prompt.
+                autoplayBlocked = false;
+                centerPlayIndicator.style.opacity = '0';
                 video.pause();
             } else {
-                video.play().catch(() => {
-                    videoMockOverlay.classList.remove('hidden');
-                });
+                // Defer until the video can actually play. On a fresh join or
+                // reload the metadata is often still loading (readyState < 1),
+                // so an immediate play() rejects. Once canplay fires, the
+                // queued play happens.
+                if (video.readyState >= 1) {
+                    requestPlay();
+                } else {
+                    video.addEventListener('canplay', requestPlay, { once: true });
+                }
             }
             updatePlayButtons();
 

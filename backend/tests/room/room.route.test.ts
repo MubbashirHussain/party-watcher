@@ -17,22 +17,27 @@ const ROOM_PASSWORD = 's3cret-room';
 let app: FastifyInstance;
 let baseUrl: string;
 let roomsDir: string;
+let uploadsDir: string;
 
 beforeAll(async () => {
   // Rooms are written to a temp file so tests never pollute data/current.json.
   roomsDir = await mkdtemp(join(tmpdir(), 'pw-rooms-'));
   process.env.ROOMS_FILE = join(roomsDir, 'current.json');
+  // Uploads live in a per-file temp dir so parallel test files never race
+  // copying/deleting the same fixture path in ./uploads.
+  uploadsDir = await mkdtemp(join(tmpdir(), 'pw-uploads-'));
+  process.env.UPLOAD_DIR = uploadsDir;
   loadEnv();
   generateFixture();
   await copyFile(
     join(process.cwd(), 'uploads', 'test-movie.mp4'),
-    join(process.cwd(), 'uploads', 'interstellar.mp4'),
+    join(uploadsDir, 'interstellar.mp4'),
   );
   const jpeg = Buffer.from(
     '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==',
     'base64',
   );
-  await writeFile(join(process.cwd(), 'uploads', 'interstellar.jpg'), jpeg);
+  await writeFile(join(uploadsDir, 'interstellar.jpg'), jpeg);
 
   const built = await buildApp();
   app = built.app;
@@ -47,8 +52,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app.close();
-  await rm(join(process.cwd(), 'uploads', 'interstellar.mp4'), { force: true });
   await rm(roomsDir, { recursive: true, force: true });
+  await rm(uploadsDir, { recursive: true, force: true });
 });
 
 /** Creates a room and returns its id plus the session cookie from creation. */

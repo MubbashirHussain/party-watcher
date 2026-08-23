@@ -92,7 +92,7 @@ function wsUrl(roomId: string, userId: string): string {
 function connect(
   roomId: string,
   cookie: string,
-): Promise<{ ws: WebSocket; sync: { paused: boolean; timeline: number; quality: string; speed: number } }> {
+): Promise<{ ws: WebSocket; sync: { paused: boolean; timeline: number; quality: string; speed: number; updatedAt: number } }> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl(roomId, cookie.split('=')[1]!), {
       headers: { Cookie: cookie },
@@ -235,7 +235,13 @@ describe('WebSocket playback sync', () => {
         );
       await expect
         .poll(async () => (await readRooms())[roomId].playback)
-        .toEqual({ paused: true, timeline: 400, quality: '1080p', speed: 1.5 });
+        .toEqual({
+          paused: true,
+          timeline: 400,
+          quality: '1080p',
+          speed: 1.5,
+          updatedAt: expect.any(Number),
+        });
     } finally {
       host.ws.close();
       viewer.ws.close();
@@ -288,11 +294,14 @@ describe('WebSocket playback sync', () => {
       const { cookie: viewerCookie } = await joinRoom(roomId);
       const viewer = await connect(roomId, viewerCookie);
       try {
+        // Paused room: the sync timeline is the exact persisted position (no
+        // extrapolation while paused).
         expect(viewer.sync).toEqual({
           paused: true,
           timeline: 200,
           quality: '720p',
           speed: 1,
+          updatedAt: expect.any(Number),
         });
       } finally {
         viewer.ws.close();
@@ -433,13 +442,92 @@ describe('WebSocket playback sync', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.playback).toEqual({
-        paused: false,
-        timeline: 77,
-        quality: '720p',
-        speed: 2,
-      });
+      // The room is playing, so the API extrapolates the timeline forward
+      // from the last host event (77s at 2x) instead of returning it stale.
+      expect(body.playback.paused).toBe(false);
+      expect(body.playback.quality).toBe('720p');
+      expect(body.playback.speed).toBe(2);
+      expect(body.playback.timeline).toBeGreaterThanOrEqual(77);
+      expect(body.playback.timeline).toBeLessThan(85);
+      expect(body.playback.updatedAt).toEqual(expect.any(Number));
       expect(body.watchCount).toBe(1);
+    } finally {
+      host.ws.close();
+    }
+  });
+
+  it('treats a reload where the new socket connects before the old closes as a reconnect', async () => {
+    const { roomId, cookie: hostCookie } = await createRoom();
+    const { cookie: viewerCookie } = await joinRoom(roomId);
+
+    const host = await connectRecording(roomId, hostCookie);
+    const hostCursor = { n: 0 };
+    // Drain the initial users message on the host socket.
+    await waitForMessage(host.messages, 'users', hostCursor);
+
+    const viewer = await connectRecording(roomId, viewerCookie);
+    const joinNotice = await waitForMessage(
+      host.messages,
+      'notification',
+      hostCursor,
+    );
+    expect(joinNotice.text).toMatch(/joined/);
+
+    // Simulated reload race: the NEW socket connects while the old one is
+    // still open (the old page's close event has not been processed yet).
+    const reloadedViewer = await connectRecording(roomId, viewerCookie);
+    // The replacement broadcasts the count immediately — it must still be 2
+    // (host + viewer), not 3 from a lingering stale socket.
+    const usersMsg = await waitForMessage(
+      reloadedViewer.messages,
+      'users',
+      { n: 0 },
+    );
+    expect(usersMsg.count).toBe(2);
+
+    // The old socket's close (triggered by the replacement) must not
+    // produce a "left" notification, nor a "joined" one for the new socket.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(
+      host.messages.slice(hostCursor.n).filter((m) => m.type === 'notification'),
+    ).toHaveLength(0);
+
+    // The API agrees on the live count.
+    const res = await fetch(`${baseUrl}/room/${roomId}/state`, {
+      headers: { Cookie: hostCookie },
+    });
+    expect((await res.json()).watchCount).toBe(2);
+
+    // The new socket fully drives sync: host events reach the reloaded viewer.
+    host.ws.send(JSON.stringify({ type: 'seek', timeline: 33 }));
+    const seekMsg = await nextMessage(reloadedViewer.ws, 'seek');
+    expect(seekMsg.timeline).toBe(33);
+
+    viewer.ws.close();
+    reloadedViewer.ws.close();
+    host.ws.close();
+  });
+
+  it('gives a reloaded client the live position of a playing room', async () => {
+    const { roomId, cookie: hostCookie } = await createRoom();
+
+    const host = await connect(roomId, hostCookie);
+    try {
+      host.ws.send(JSON.stringify({ type: 'play', timeline: 50 }));
+      // Let the room keep "playing" so the persisted timeline goes stale.
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      // A client connecting now (e.g. after a reload) must receive the
+      // extrapolated live position, not the stale 50s.
+      const { cookie: viewerCookie } = await joinRoom(roomId);
+      const viewer = await connect(roomId, viewerCookie);
+      try {
+        expect(viewer.sync.paused).toBe(false);
+        expect(viewer.sync.timeline).toBeGreaterThan(50);
+        expect(viewer.sync.timeline).toBeLessThan(55);
+      } finally {
+        viewer.ws.close();
+      }
     } finally {
       host.ws.close();
     }
