@@ -138,6 +138,7 @@ export async function roomRoutes(
   app.get<{ Querystring: { movieId?: string } }>(
     "/",
     async (request, reply) => {
+      console.log(catalog.getAll());
       return reply.view("home", { movies: catalog.getAll() });
     },
   );
@@ -357,8 +358,7 @@ export async function roomRoutes(
         // getPlayback extrapolates the timeline to "now" while the room is
         // playing, so a reloaded client resumes at the live position.
         playback: rooms.getPlayback(room.id),
-        watchCount:
-          opts.getConnectionCount?.(room.id) ?? room.users.length,
+        watchCount: opts.getConnectionCount?.(room.id) ?? room.users.length,
       });
     },
   );

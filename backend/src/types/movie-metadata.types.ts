@@ -18,4 +18,6 @@ export interface MovieMetadata {
   thumbnail: string;
   /** MP4 file name inside uploads/, e.g. "interstellar.mp4". */
   filename: string;
+  /** Genre of the movie, e.g. "Sci-fi". */
+  genre?: string;
 }

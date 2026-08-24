@@ -1,6 +1,6 @@
-import { readFile } from 'node:fs/promises';
-import { z } from 'zod';
-import type { MovieMetadata } from '../types/movie-metadata.types.js';
+import { readFile } from "node:fs/promises";
+import { z } from "zod";
+import type { MovieMetadata } from "../types/movie-metadata.types.js";
 
 const movieMetadataSchema = z
   .object({
@@ -9,7 +9,8 @@ const movieMetadataSchema = z
     year: z.number().int(),
     duration: z.string().min(1),
     thumbnail: z.string().min(1),
-    filename: z.string().min(1).endsWith('.mp4'),
+    filename: z.string().min(1).endsWith(".mp4"),
+    genre: z.string().optional(),
   })
   .strict();
 
@@ -17,15 +18,15 @@ const catalogSchema = z.array(movieMetadataSchema);
 
 export class CatalogError extends Error {
   constructor() {
-    super('Movie catalog could not be read');
-    this.name = 'CatalogError';
+    super("Movie catalog could not be read");
+    this.name = "CatalogError";
   }
 }
 
 export class MovieNotInCatalogError extends Error {
   constructor() {
-    super('Movie not in catalog');
-    this.name = 'MovieNotInCatalogError';
+    super("Movie not in catalog");
+    this.name = "MovieNotInCatalogError";
   }
 }
 
@@ -41,7 +42,7 @@ export class MovieCatalogService {
   async load(moviesFilePath: string): Promise<MovieMetadata[]> {
     let raw: string;
     try {
-      raw = await readFile(moviesFilePath, 'utf8');
+      raw = await readFile(moviesFilePath, "utf8");
     } catch {
       throw new CatalogError();
     }
@@ -60,7 +61,10 @@ export class MovieCatalogService {
 
     const movies = result.data;
     for (const movie of movies) {
-      if (this.moviesBySlug.has(movie.id) || this.filenames.has(movie.filename)) {
+      if (
+        this.moviesBySlug.has(movie.id) ||
+        this.filenames.has(movie.filename)
+      ) {
         throw new CatalogError();
       }
       this.moviesBySlug.set(movie.id, movie);
