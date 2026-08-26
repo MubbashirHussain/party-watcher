@@ -23,7 +23,7 @@ export async function getMovie(
   uploadDir: string,
   slug: string,
 ): Promise<Movie> {
-  const metadata = catalog.getBySlug(slug);
+  const metadata = await catalog.getBySlug(slug);
   const filePath = resolveFilePath(uploadDir, metadata.filename);
   console.log("filePath", filePath);
   console.log("metadata", metadata);

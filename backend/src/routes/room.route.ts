@@ -138,8 +138,8 @@ export async function roomRoutes(
   app.get<{ Querystring: { movieId?: string } }>(
     "/",
     async (request, reply) => {
-      console.log(catalog.getAll());
-      return reply.view("home", { movies: catalog.getAll() });
+      const movies = await catalog.getAll();
+      return reply.view("home", { movies });
     },
   );
 
@@ -147,7 +147,7 @@ export async function roomRoutes(
     Body: { movieId?: string; visibility?: string; password?: string };
   }>("/rooms", async (request, reply) => {
     const parsed = createRoomBodySchema.safeParse(request.body ?? {});
-    console.log("-----------------------", parsed);
+    console.log("parsed", parsed);
 
     if (!parsed.success) {
       return reply.status(400).view("error", {

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { Collection, MongoClient, ObjectId } from "mongodb";
 import { z } from "zod";
 import type { MovieMetadata } from "../types/movie-metadata.types.js";
 
@@ -6,15 +6,18 @@ const movieMetadataSchema = z
   .object({
     id: z.string().min(1),
     title: z.string().min(1),
+    description: z.string().optional(),
+    slug: z.string().optional(),
     year: z.number().int(),
     duration: z.string().min(1),
     thumbnail: z.string().min(1),
     filename: z.string().min(1).endsWith(".mp4"),
+    _id: z.instanceof(ObjectId),
+    __v: z.number().optional(),
     genre: z.string().optional(),
+    url: z.string().optional(),
   })
   .strict();
-
-const catalogSchema = z.array(movieMetadataSchema);
 
 export class CatalogError extends Error {
   constructor() {
@@ -30,68 +33,162 @@ export class MovieNotInCatalogError extends Error {
   }
 }
 
-/**
- * Reads and validates `data/movies.json` (the single source of movie
- * metadata). Movies are keyed by their slug `id`, and duplicate ids or
- * duplicate filenames are rejected so a slug always maps to one file.
- */
+let client: MongoClient | null = null;
+let moviesCollection: Collection<MovieMetadata> | null = null;
+
+async function getMoviesCollection() {
+  if (moviesCollection) {
+    return moviesCollection;
+  }
+
+  const uri = process.env.MONGODB_URI;
+
+  if (!uri) {
+    throw new Error("MONGODB_URI is not defined");
+  }
+
+  client = new MongoClient(uri);
+  await client.connect();
+
+  const db = client.db(process.env.MONGODB_DB || "party-watch");
+
+  moviesCollection = db.collection<MovieMetadata>("movies");
+
+  await moviesCollection.createIndex({ id: 1 }, { unique: true });
+  await moviesCollection.createIndex({ filename: 1 }, { unique: true });
+
+  return moviesCollection;
+}
+
 export class MovieCatalogService {
-  private readonly moviesBySlug = new Map<string, MovieMetadata>();
-  private readonly filenames = new Set<string>();
-
-  async load(moviesFilePath: string): Promise<MovieMetadata[]> {
-    let raw: string;
+  async load(_moviesFilePath?: string): Promise<MovieMetadata[]> {
     try {
-      raw = await readFile(moviesFilePath, "utf8");
-    } catch {
+      const collection = await getMoviesCollection();
+
+      const movies = await collection.find({}).toArray();
+
+      const result = z.array(movieMetadataSchema).safeParse(movies);
+
+      if (!result.success) {
+        throw new CatalogError();
+      }
+
+      return result.data;
+    } catch (error) {
+      if (error instanceof CatalogError) {
+        throw error;
+      }
+
       throw new CatalogError();
     }
+  }
 
-    let parsed: unknown;
+  async getAll(): Promise<MovieMetadata[]> {
     try {
-      parsed = JSON.parse(raw);
-    } catch {
+      const collection = await getMoviesCollection();
+
+      const movies = await collection.find({}).toArray();
+
+      const result = z.array(movieMetadataSchema).safeParse(movies);
+
+      if (!result.success) {
+        throw new CatalogError();
+      }
+
+      return result.data;
+    } catch (error) {
+      if (error instanceof CatalogError) {
+        throw error;
+      }
+
       throw new CatalogError();
     }
+  }
 
-    const result = catalogSchema.safeParse(parsed);
+  async getBySlug(slug: string): Promise<MovieMetadata> {
+    const collection = await getMoviesCollection();
+
+    const movie = await collection.findOne({ id: slug });
+
+    if (!movie) {
+      throw new MovieNotInCatalogError();
+    }
+
+    const result = movieMetadataSchema.safeParse(movie);
+
     if (!result.success) {
       throw new CatalogError();
     }
 
-    const movies = result.data;
-    for (const movie of movies) {
-      if (
-        this.moviesBySlug.has(movie.id) ||
-        this.filenames.has(movie.filename)
-      ) {
-        throw new CatalogError();
-      }
-      this.moviesBySlug.set(movie.id, movie);
-      this.filenames.add(movie.filename);
+    return result.data;
+  }
+
+  async getByFilename(filename: string): Promise<MovieMetadata | undefined> {
+    const collection = await getMoviesCollection();
+
+    const movie = await collection.findOne({ filename });
+
+    if (!movie) {
+      return undefined;
     }
 
-    return movies;
+    const result = movieMetadataSchema.safeParse(movie);
+
+    if (!result.success) {
+      throw new CatalogError();
+    }
+
+    return result.data;
   }
 
-  getAll(): MovieMetadata[] {
-    return [...this.moviesBySlug.values()];
+  async create(movie: MovieMetadata): Promise<MovieMetadata> {
+    const collection = await getMoviesCollection();
+
+    const result = movieMetadataSchema.safeParse(movie);
+
+    if (!result.success) {
+      throw new CatalogError();
+    }
+
+    await collection.insertOne(result.data);
+
+    return result.data;
   }
 
-  getBySlug(slug: string): MovieMetadata {
-    const movie = this.moviesBySlug.get(slug);
-    if (!movie) {
+  async update(
+    id: string,
+    data: Partial<Omit<MovieMetadata, "id">>,
+  ): Promise<MovieMetadata> {
+    const collection = await getMoviesCollection();
+
+    const result = await collection.findOneAndUpdate(
+      { id },
+      { $set: data },
+      { returnDocument: "after" },
+    );
+
+    if (!result) {
       throw new MovieNotInCatalogError();
     }
-    return movie;
+
+    const validated = movieMetadataSchema.safeParse(result);
+
+    if (!validated.success) {
+      throw new CatalogError();
+    }
+
+    return validated.data;
   }
 
-  getByFilename(filename: string): MovieMetadata | undefined {
-    for (const movie of this.moviesBySlug.values()) {
-      if (movie.filename === filename) {
-        return movie;
-      }
+  async delete(id: string): Promise<boolean> {
+    const collection = await getMoviesCollection();
+
+    const result = await collection.deleteOne({ id });
+
+    if (result.deletedCount === 0) {
+      throw new MovieNotInCatalogError();
     }
-    return undefined;
+
+    return true;
   }
 }
