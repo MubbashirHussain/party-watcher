@@ -119,6 +119,7 @@
             src="/movie/<%= typeof movieId !== 'undefined' ? movieId : 'big-buck-bunny' %>"
             preload="metadata"
             playsinline
+            muted
             poster="/movie/<%= typeof movieId !== 'undefined' ? movieId : 'big-buck-bunny' %>/thumbnail"
         ></video>
 
@@ -297,12 +298,33 @@
 
         let hideTimeout = null;
         let pendingSeek = null;
+        // The video starts muted so the browser's autoplay policy never blocks
+        // the programmatic play() that runs on initial sync (page load /
+        // reload / reconnect). It is unmuted automatically on the viewer's
+        // first interaction with the player, which counts as a user gesture.
+        video.muted = true;
+        volumeSlider.value = 0;
+        let userHasUnmuted = false;
+
+        function unmuteOnFirstGesture() {
+            if (userHasUnmuted) return;
+            userHasUnmuted = true;
+            video.muted = false;
+            video.volume = 1;
+            volumeSlider.value = 1;
+        }
         let ws = null;
         let wsConnected = false;
         let reconnectTimer = null;
         let reconnectAttempts = 0;
         let statePollTimer = null;
         let autoplayBlocked = false;
+        // The last authoritative paused/playing state received from the
+        // server (via sync/play/pause/drift). Used to detect when the local
+        // <video> element has fallen out of sync with what it should be
+        // doing (e.g. a blocked autoplay), so it can be corrected on the
+        // very next user interaction instead of waiting indefinitely.
+        let desiredPaused = null;
 
         function requestPlay() {
             video.play().then(() => {
@@ -334,9 +356,11 @@
         function togglePlay() {
             if (!IS_ADMIN) return;
             if (video.paused) {
+                desiredPaused = false;
                 requestPlay();
                 sendPlaybackEvent({ type: 'play', timeline: video.currentTime });
             } else {
+                desiredPaused = true;
                 video.pause();
                 sendPlaybackEvent({ type: 'pause', timeline: video.currentTime });
             }
@@ -355,6 +379,14 @@
                 centerIcon.textContent = '▶';
             }
         }
+
+        // The video's own play/pause events are the source of truth for the
+        // button UI. Sync handlers below also call updatePlayButtons()
+        // directly for a snappy response, but these listeners guarantee the
+        // UI is corrected if a play() call is rejected (e.g. blocked
+        // autoplay) or otherwise settles later than expected.
+        video.addEventListener('play', updatePlayButtons);
+        video.addEventListener('pause', updatePlayButtons);
 
         playPauseBtn.addEventListener('click', togglePlay);
         playerContainer.addEventListener('click', (e) => {
@@ -410,6 +442,7 @@
         });
 
         muteBtn.addEventListener('click', () => {
+            userHasUnmuted = true;
             video.muted = !video.muted;
             volumeSlider.value = video.muted ? 0 : video.volume;
         });
@@ -615,27 +648,45 @@
             }
         }
 
-        function applyRemotePlay(timeline) {
-            pendingSeek = timeline;
-            if (!video.paused) {
-                video.currentTime = timeline;
-                pendingSeek = null;
+        // Single source of truth for "what should the video be doing right
+        // now". Every path that learns of a state change (initial sync,
+        // host play/pause/drift, or the host's own local action) funnels
+        // through here instead of each independently touching
+        // video.currentTime/play()/pause(), which is what let them drift out
+        // of sync with each other.
+        function applyDesiredState(paused, timeline) {
+            desiredPaused = paused;
+            if (typeof timeline === 'number' && timeline >= 0) {
+                if (video.readyState >= 1) {
+                    video.currentTime = video.duration
+                        ? Math.min(timeline, video.duration)
+                        : timeline;
+                    pendingSeek = null;
+                } else {
+                    // Metadata not loaded yet: the loadedmetadata/canplay
+                    // listeners below apply pendingSeek once it is.
+                    pendingSeek = timeline;
+                }
             }
-            requestPlay();
+            if (paused) {
+                autoplayBlocked = false;
+                centerPlayIndicator.style.opacity = '0';
+                video.pause();
+            } else if (video.readyState >= 1) {
+                requestPlay();
+            } else {
+                video.addEventListener('canplay', requestPlay, { once: true });
+            }
             updatePlayButtons();
+        }
+
+        function applyRemotePlay(timeline) {
+            applyDesiredState(false, timeline);
             triggerCenterAnimation();
         }
 
         function applyRemotePause(timeline) {
-            autoplayBlocked = false;
-            centerPlayIndicator.style.opacity = '0';
-            pendingSeek = timeline;
-            video.pause();
-            if (video.currentTime !== timeline) {
-                video.currentTime = timeline;
-            }
-            pendingSeek = null;
-            updatePlayButtons();
+            applyDesiredState(true, timeline);
             triggerCenterAnimation();
         }
 
@@ -646,7 +697,6 @@
 
         function applyPlaybackState(playback) {
             if (!playback) return;
-            const targetPaused = playback.paused;
             if (playback.quality) {
                 document.getElementById('currentQuality').textContent = playback.quality;
             }
@@ -654,27 +704,7 @@
                 video.playbackRate = playback.speed;
                 document.getElementById('speedBtn').textContent = `${playback.speed}x`;
             }
-            if (playback.timeline > 0 && video.readyState >= 1) {
-                video.currentTime = video.duration
-                    ? Math.min(playback.timeline, video.duration)
-                    : playback.timeline;
-            }
-            if (targetPaused) {
-                autoplayBlocked = false;
-                centerPlayIndicator.style.opacity = '0';
-                video.pause();
-            } else {
-                if (video.readyState >= 1) {
-                    requestPlay();
-                } else {
-                    video.addEventListener('canplay', requestPlay, { once: true });
-                }
-            }
-            updatePlayButtons();
-
-            if (playback.timeline > 0 && video.readyState < 1) {
-                pendingSeek = playback.timeline;
-            }
+            applyDesiredState(playback.paused, playback.timeline);
         }
 
         video.addEventListener('loadedmetadata', () => {
@@ -691,17 +721,29 @@
             }
         });
 
+        // A video reaching its natural end pauses itself (browser default),
+        // but nothing told the server. Treat it exactly like a host pause at
+        // the final timestamp so reconnecting/existing viewers see the
+        // correct paused state instead of the server extrapolating the
+        // timeline forever and viewers' recovery loop replaying it.
+        video.addEventListener('ended', () => {
+            desiredPaused = true;
+            updatePlayButtons();
+            if (IS_ADMIN) {
+                sendPlaybackEvent({ type: 'pause', timeline: video.duration || video.currentTime });
+            }
+        });
+
         function applyDrift(timeline) {
             if (!video.duration) return;
-            
+
             // If the host is sending drift, they are actively playing.
             // If we are paused, we should sync timeline and attempt to play.
             if (video.paused) {
-                video.currentTime = timeline;
-                requestPlay();
-                updatePlayButtons();
+                applyDesiredState(false, timeline);
                 return;
             }
+            desiredPaused = false;
 
             const diff = timeline - video.currentTime;
             if (Math.abs(diff) > 1) {
@@ -714,6 +756,45 @@
                 sendPlaybackEvent({ type: 'drift', timeline: video.currentTime });
             }
         }, 5000);
+
+        // Backstop + gesture recovery below are strictly for viewers. The
+        // host's own video state is always driven directly by their own
+        // clicks (togglePlay), never by these; running them for the host too
+        // was the bug that caused a host's manual pause to auto-resume a
+        // second later, because desiredPaused is only ever updated from
+        // server-originated messages, which the host doesn't receive for
+        // their own actions.
+        if (!IS_ADMIN) {
+            // Backstop: if the video is paused but the last authoritative
+            // state says it shouldn't be (a blocked/failed autoplay), keep
+            // retrying at a tighter interval than the 5s host drift tick so
+            // it recovers as soon as the browser allows it, even without a
+            // fresh direct gesture.
+            setInterval(() => {
+                if (desiredPaused === false && video.paused && video.readyState >= 1) {
+                    requestPlay();
+                }
+            }, 1500);
+
+            const handleUserGesture = () => {
+                unmuteOnFirstGesture();
+                // A blocked/late autoplay leaves the video paused even
+                // though the server says it should be playing. Any real
+                // interaction anywhere on the page is a valid
+                // autoplay-unlock gesture in every browser, so use it to
+                // immediately correct the video instead of waiting on the
+                // next retry tick (or forcing a click specifically inside
+                // the player).
+                if (desiredPaused === false && video.paused) {
+                    requestPlay();
+                }
+            };
+            document.addEventListener('pointerdown', handleUserGesture);
+            document.addEventListener('keydown', handleUserGesture);
+        } else {
+            document.addEventListener('pointerdown', unmuteOnFirstGesture, { once: true });
+            document.addEventListener('keydown', unmuteOnFirstGesture, { once: true });
+        }
 
         startStatePolling();
         connectSync();

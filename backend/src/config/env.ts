@@ -1,11 +1,13 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 const envSchema = z.object({
   // 0 is allowed so callers can request an ephemeral port (useful in tests).
   PORT: z.coerce.number().int().min(0).default(3000),
-  UPLOAD_DIR: z.string().min(1).default('./uploads'),
-  MOVIES_FILE: z.string().min(1).default('./data/movies.json'),
-  ROOMS_FILE: z.string().min(1).default('./data/current.json'),
+  UPLOAD_DIR: z.string().min(1).default("./uploads"),
+  MOVIES_FILE: z.string().min(1).default("./data/movies.json"),
+  ROOMS_FILE: z.string().min(1).default("./data/current.json"),
+  MONGODB_URI: z.string().min(1),
+  MONGODB_DB: z.string().min(1).default("party-watch"),
 });
 
 export type Env = z.infer<typeof envSchema>;
